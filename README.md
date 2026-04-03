@@ -12,7 +12,7 @@ Raw OHLCV CSV
      ▼
 src/data          ← feature engineering, labels, rolling-window dataset
      │
-     ├──► src/models/tabular.py   ← Transformer on numeric features
+     ├──► src/models/tabular_transformer.py   ← Transformer on numeric features
      ├──► src/models/image.py     ← CNN/ViT encoder on 60-day candlestick charts
      ├──► src/models/text.py      ← pre-trained LM encoder on news/analyst text
      └──► src/models/kg.py        ← graph context tokens from src/kg
@@ -41,7 +41,7 @@ Each branch (tabular, image, text, KG) can be trained independently and fused la
 | 1 | Repo scaffold | *(this commit)* |
 | 2 | Data pipeline | `src/data` |
 | 3 | Candlestick charts | `src/data` → `data/interim/charts/` |
-| 4 | Tabular Transformer baseline | `src/models/tabular.py`, `src/training` |
+| 4 | Tabular Transformer baseline | `src/models/tabular_transformer.py`, `src/training/train_tabular.py`, `src/training/evaluate.py` |
 | 5 | Image branch | `src/models/image.py` |
 | 6 | Text branch | `src/models/text.py` |
 | 7 | Knowledge augmentation | `src/kg` |
@@ -166,3 +166,50 @@ This keeps the pipeline CSV-first, lightweight, and model-agnostic.
 - Use `attach_chart_paths(...)` to add a `chart_path` column to tabular sample rows.
 - This keeps row-level linkage deterministic before any expensive rendering job runs.
 - Use `generate_or_resolve_sample_chart(...)` in batch/serving jobs to lazily generate missing chart files or reuse existing files.
+
+
+## Milestone 4: tabular Transformer baseline
+
+### Model architecture (`src/models/tabular_transformer.py`)
+
+- Input tensor shape: **`[batch, window_len, feature_dim]`**
+- `Linear(feature_dim -> model_dim)` input projection
+- Sinusoidal positional encoding (supports variable sequence lengths)
+- 2-4 layer `nn.TransformerEncoder` stack
+- Sequence pooling via:
+  - `mean` pooling (default), or
+  - learned `CLS` token pooling
+- Binary classification head outputs one **logit per sample**
+
+### Expected dataset artifact
+
+Training expects a `.npz` file with keys:
+
+- `X`: shape `[num_samples, window_len, feature_dim]`
+- `y`: shape `[num_samples]` with binary labels `{0,1}`
+- `end_dates`: shape `[num_samples]` for chronological splitting
+
+### Training entry point
+
+```bash
+python -m src.training.train_tabular \
+  --dataset data/processed/rolling_windows.npz \
+  --checkpoint-path data/processed/checkpoints/tabular_transformer.pt
+```
+
+What it includes:
+- time-based train/validation split from `end_dates`
+- train + validation loops with BCE-with-logits
+- best-checkpoint saving by validation F1
+
+### Evaluation helper entry point
+
+Use metric utility in `src/training/evaluate.py`:
+
+- accuracy
+- precision
+- recall
+- F1
+- ROC-AUC
+
+This tabular baseline is intentionally lightweight and modular so it can be reused from API workflows (`src/app`) or batch jobs and extended later for multimodal fusion.
