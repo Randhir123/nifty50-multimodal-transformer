@@ -139,3 +139,30 @@ Required columns:
 - `end_dates`: shape `[num_samples]`, timestamp of each prediction row
 
 This keeps the pipeline CSV-first, lightweight, and model-agnostic.
+
+## Milestone 3: candlestick chart generation
+
+`src/viz/charts.py` provides deterministic chart utilities for building the image branch input without introducing model logic yet.
+
+### Chart generation assumptions
+
+- One chart corresponds to one `(stock, prediction_date)` sample.
+- Each image uses the latest **60 trading rows** where `date <= prediction_date`.
+- Rendered layers are fixed to keep outputs reproducible and deployment-friendly:
+  - OHLC candlesticks
+  - volume bars
+  - 10-day moving average
+  - 20-day moving average
+- Input OHLCV data must include: `date`, `open`, `high`, `low`, `close`, `volume`.
+
+### Output path convention
+
+- Filename format: `{SYMBOL}_{YYYYMMDD}.png`
+- Resolved path format: `{output_dir}/{SYMBOL}_{YYYYMMDD}.png`
+- Example: `data/interim/charts/RELIANCE_20260203.png`
+
+### Dataset row attachment strategy
+
+- Use `attach_chart_paths(...)` to add a `chart_path` column to tabular sample rows.
+- This keeps row-level linkage deterministic before any expensive rendering job runs.
+- Use `generate_or_resolve_sample_chart(...)` in batch/serving jobs to lazily generate missing chart files or reuse existing files.
