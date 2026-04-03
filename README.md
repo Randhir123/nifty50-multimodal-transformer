@@ -88,3 +88,54 @@ pip install -e .
 ## Label definition
 
 A stock is labelled **positive** for day *t* if its 3-day forward return exceeds the equal-weighted Nifty-50 index return over the same window. No future data leaks into features computed at day *t*.
+
+
+## Dataset schema (first working pipeline)
+
+### 1) Raw CSV input (stock OHLCV)
+
+Required columns:
+
+- `date` (parseable date)
+- `open`
+- `high`
+- `low`
+- `close`
+- `volume`
+
+### 2) Raw CSV input (NIFTY index)
+
+Required columns:
+
+- `date`
+- `close` (renamed to `index_close` in the merged frame)
+
+### 3) Engineered feature columns (`src/data/features.py`)
+
+- `log_return_1d`
+- `cum_return_3d`
+- `cum_return_5d`
+- `cum_return_10d`
+- `realized_vol_5d`
+- `realized_vol_10d`
+- `high_low_range_over_close`
+- `close_over_10dma_minus_1`
+- `close_over_20dma_minus_1`
+- `volume_over_20d_avg`
+- `stock_minus_index_return`
+
+### 4) Label columns (`src/data/labels.py`)
+
+- `stock_return_next_3d`
+- `nifty_return_next_3d`
+- `label` (`1` if stock next-3d return > index next-3d return, else `0`)
+
+### 5) Rolling Transformer dataset (`src/data/dataset.py`)
+
+`create_rolling_transformer_dataset` returns:
+
+- `X`: shape `[num_samples, window_size, num_features]`
+- `y`: shape `[num_samples]`, label at each window end date
+- `end_dates`: shape `[num_samples]`, timestamp of each prediction row
+
+This keeps the pipeline CSV-first, lightweight, and model-agnostic.
