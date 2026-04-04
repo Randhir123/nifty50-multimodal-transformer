@@ -1,4 +1,4 @@
-"""Dataset helpers for rolling-window Transformer inputs."""
+"""Dataset helpers for rolling-window and image-only model inputs."""
 
 from __future__ import annotations
 
@@ -23,6 +23,21 @@ class RollingWindowDataset:
     X: np.ndarray
     y: np.ndarray
     end_dates: np.ndarray
+
+
+@dataclass(frozen=True)
+class ImagePathDataset:
+    """Container for image-only samples tied to binary labels.
+
+    Attributes:
+        image_paths: Absolute or relative chart image paths.
+        y: Label vector of shape ``[num_samples]`` with values in ``{0, 1}``.
+        sample_dates: Date values used for chronological splitting.
+    """
+
+    image_paths: np.ndarray
+    y: np.ndarray
+    sample_dates: np.ndarray
 
 
 def load_ohlcv_csv(path: str | Path, *, date_col: str = "date") -> pd.DataFrame:
@@ -117,3 +132,47 @@ def create_rolling_transformer_dataset(
         end_dates[i] = dates[end_idx]
 
     return RollingWindowDataset(X=X, y=y, end_dates=end_dates)
+
+
+def create_image_path_dataset(
+    df: pd.DataFrame,
+    *,
+    image_path_col: str = "chart_path",
+    label_col: str = "label",
+    date_col: str = "date",
+    dropna: bool = True,
+    require_existing_files: bool = False,
+) -> ImagePathDataset:
+    """Create image-path dataset for image-only training.
+
+    Expects one row per prediction sample with deterministic chart paths from
+    ``src/viz/charts.py`` and the project's binary label.
+    """
+    required_cols = [image_path_col, label_col, date_col]
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    work_df = df.copy()
+    work_df[date_col] = pd.to_datetime(work_df[date_col])
+    if dropna:
+        work_df = work_df.dropna(subset=required_cols)
+
+    work_df = work_df.sort_values(date_col).reset_index(drop=True)
+
+    image_paths = work_df[image_path_col].astype(str).to_numpy(dtype=object)
+    labels = work_df[label_col].astype(np.int64).to_numpy()
+    sample_dates = work_df[date_col].to_numpy()
+
+    if require_existing_files:
+        exists_mask = np.array([Path(p).exists() for p in image_paths], dtype=bool)
+        if not np.any(exists_mask):
+            raise ValueError("No image paths exist on disk after filtering")
+        image_paths = image_paths[exists_mask]
+        labels = labels[exists_mask]
+        sample_dates = sample_dates[exists_mask]
+
+    if len(image_paths) == 0:
+        raise ValueError("Image dataset is empty")
+
+    return ImagePathDataset(image_paths=image_paths, y=labels, sample_dates=sample_dates)
