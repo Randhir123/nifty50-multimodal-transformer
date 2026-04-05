@@ -8,17 +8,14 @@ transformers>=4.41
 
 # Charts
 mplfinance>=0.12
-
 # Knowledge graph
 networkx>=3.3
-
 # Visualisation
 matplotlib>=3.8
 umap-learn>=0.5
-
 # Utilities
 tqdm>=4.66
 pydantic>=2.6
-
 # Text / PDF
 pypdf>=4.2
+yfinance>=0.2

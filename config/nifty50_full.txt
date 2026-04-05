@@ -1,0 +1,12 @@
+# Default ticker universe used by src.data.download_yfinance
+# Replace this file with your complete Nifty 50 universe as needed.
+RELIANCE.NS
+TCS.NS
+INFY.NS
+HDFCBANK.NS
+ICICIBANK.NS
+ITC.NS
+LT.NS
+BHARTIARTL.NS
+KOTAKBANK.NS
+SBIN.NS
