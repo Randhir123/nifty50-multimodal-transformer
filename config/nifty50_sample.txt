@@ -1,0 +1,6 @@
+# Starter Nifty 50 sample tickers
+RELIANCE.NS
+TCS.NS
+INFY.NS
+HDFCBANK.NS
+ICICIBANK.NS

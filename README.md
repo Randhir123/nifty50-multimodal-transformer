@@ -204,6 +204,58 @@ Required columns:
 
 This keeps the pipeline CSV-first, lightweight, and model-agnostic.
 
+
+## YFinance ingestion and local CSV snapshots
+
+Use `src.data.download_yfinance` to fetch Yahoo Finance data for Indian tickers (for example `RELIANCE.NS`, `TCS.NS`, `INFY.NS`) and optional benchmark/index symbols (for example `^NSEI`), then immediately cache results as local CSV files.
+
+Why local CSV snapshots after download?
+
+- downstream feature generation still reads CSV files,
+- label generation still reads CSV files,
+- chart generation still reads CSV files,
+- experiments remain reproducible because training uses the saved snapshot rather than a moving live API response.
+
+Downloaded files are normalized to this schema before saving:
+
+- `date`, `open`, `high`, `low`, `close`, `volume`
+
+Saved file paths are deterministic and stored under `data/raw/`.
+Examples:
+
+- `RELIANCE.NS` -> `data/raw/RELIANCE_NS.csv`
+- `^NSEI` -> `data/raw/NSEI.csv`
+
+### Download using a ticker file
+
+```bash
+python -m src.data.download_yfinance \
+  --ticker-file config/nifty50_sample.txt \
+  --benchmark ^NSEI \
+  --start 2022-01-01 \
+  --end 2025-01-01
+```
+
+### Download using explicit tickers
+
+```bash
+python -m src.data.download_yfinance \
+  --tickers RELIANCE.NS TCS.NS INFY.NS \
+  --benchmark ^NSEI \
+  --start 2022-01-01 \
+  --end 2025-01-01
+```
+
+### Default behavior when no ticker source is provided
+
+If neither `--tickers` nor `--ticker-file` is provided, the downloader automatically uses `config/nifty50_full.txt`.
+
+```bash
+python -m src.data.download_yfinance --start 2022-01-01 --end 2025-01-01
+```
+
+If `config/nifty50_full.txt` is missing, the command fails with a clear error.
+
 ## Milestone 3: candlestick chart generation
 
 `src/viz/charts.py` provides deterministic chart utilities for building the image branch input without introducing model logic yet.
