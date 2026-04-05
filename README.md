@@ -226,14 +226,15 @@ Examples:
 - `RELIANCE.NS` -> `data/raw/RELIANCE_NS.csv`
 - `^NSEI` -> `data/raw/NSEI.csv`
 
+If `--end` is omitted, the downloader uses today's date.
+
 ### Download using a ticker file
 
 ```bash
 python -m src.data.download_yfinance \
   --ticker-file config/nifty50_sample.txt \
   --benchmark ^NSEI \
-  --start 2022-01-01 \
-  --end 2025-01-01
+  --start 2022-01-01
 ```
 
 ### Download using explicit tickers
@@ -242,8 +243,7 @@ python -m src.data.download_yfinance \
 python -m src.data.download_yfinance \
   --tickers RELIANCE.NS TCS.NS INFY.NS \
   --benchmark ^NSEI \
-  --start 2022-01-01 \
-  --end 2025-01-01
+  --start 2022-01-01
 ```
 
 ### Default behavior when no ticker source is provided
@@ -251,7 +251,7 @@ python -m src.data.download_yfinance \
 If neither `--tickers` nor `--ticker-file` is provided, the downloader automatically uses `config/nifty50_full.txt`.
 
 ```bash
-python -m src.data.download_yfinance --start 2022-01-01 --end 2025-01-01
+python -m src.data.download_yfinance --start 2022-01-01
 ```
 
 If `config/nifty50_full.txt` is missing, the command fails with a clear error.
@@ -261,7 +261,9 @@ If `config/nifty50_full.txt` is missing, the command fails with a clear error.
 Use the smoke-test script to verify the real-data path end to end on a tiny universe:
 
 - prefers already cached OHLCV CSVs under `data/raw/` when present,
+- defaults downloads to today's date as the end boundary (latest available trading day from that run),
 - downloads missing CSVs with the new yfinance downloader,
+- supports `--force-refresh` to ignore cache and refresh CSV snapshots,
 - computes features and labels vs benchmark (`^NSEI` by default),
 - builds rolling windows,
 - generates deterministic candlestick charts for latest sample per stock,
@@ -278,6 +280,18 @@ Run:
 
 ```bash
 python scripts/real_data_smoke_test.py
+```
+
+Force-refresh cached files:
+
+```bash
+python scripts/real_data_smoke_test.py --force-refresh
+```
+
+Custom range with force-refresh:
+
+```bash
+python scripts/real_data_smoke_test.py --start 2024-01-01 --force-refresh
 ```
 
 Optional custom range/output:
