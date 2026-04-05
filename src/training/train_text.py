@@ -98,8 +98,12 @@ def time_based_split(
     if split_idx <= 0 or split_idx >= len(texts):
         raise ValueError("Split produced empty train or validation set")
 
-    train = TextBranchArrays(texts=texts[:split_idx], y=y[:split_idx], sample_dates=sample_dates[:split_idx])
-    val = TextBranchArrays(texts=texts[split_idx:], y=y[split_idx:], sample_dates=sample_dates[split_idx:])
+    train = TextBranchArrays(
+        texts=texts[:split_idx], y=y[:split_idx], sample_dates=sample_dates[:split_idx]
+    )
+    val = TextBranchArrays(
+        texts=texts[split_idx:], y=y[split_idx:], sample_dates=sample_dates[split_idx:]
+    )
     return train, val
 
 
@@ -182,7 +186,9 @@ def train_text_branch(args: argparse.Namespace) -> None:
         collate_fn=_text_collate_fn,
     )
 
-    device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
+    device = torch.device(
+        args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu"
+    )
 
     config = TextEncoderConfig(
         pretrained_model_name=args.pretrained_model_name,
@@ -193,7 +199,9 @@ def train_text_branch(args: argparse.Namespace) -> None:
     model = TextEncoder(config).to(device)
 
     criterion = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
+    )
 
     best_val_f1 = -float("inf")
     checkpoint_path = Path(args.checkpoint_path)
@@ -242,12 +250,18 @@ def train_text_branch(args: argparse.Namespace) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build CLI args for text branch training."""
     parser = argparse.ArgumentParser(description="Train stock-news text branch")
-    parser.add_argument("--samples", type=str, required=True, help="CSV/Parquet with date, text, label")
+    parser.add_argument(
+        "--samples", type=str, required=True, help="CSV/Parquet with date, text, label"
+    )
     parser.add_argument("--text-col", type=str, default="text")
     parser.add_argument("--label-col", type=str, default="label")
     parser.add_argument("--date-col", type=str, default="date")
 
-    parser.add_argument("--checkpoint-path", type=str, default="data/processed/checkpoints/text_encoder.pt")
+    parser.add_argument(
+        "--checkpoint-path",
+        type=str,
+        default="data/processed/checkpoints/text_encoder.pt",
+    )
     parser.add_argument("--epochs", type=int, default=5)
     parser.add_argument("--batch-size", type=int, default=16)
     parser.add_argument("--learning-rate", type=float, default=2e-5)
@@ -255,7 +269,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--val-fraction", type=float, default=0.2)
     parser.add_argument("--device", type=str, default="cpu")
 
-    parser.add_argument("--pretrained-model-name", type=str, default="distilbert-base-uncased")
+    parser.add_argument(
+        "--pretrained-model-name", type=str, default="distilbert-base-uncased"
+    )
     parser.add_argument("--max-length", type=int, default=192)
     parser.add_argument("--dropout", type=float, default=0.1)
     parser.add_argument("--pooling", type=str, default="mean", choices=["mean", "cls"])

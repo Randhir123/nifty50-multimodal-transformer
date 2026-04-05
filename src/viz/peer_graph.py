@@ -55,7 +55,10 @@ def plot_peer_graph(
         "stock": "#28AFB0",
         "event_type": "#C73E1D",
     }
-    node_colors = [type_to_color.get(graph.nodes[n].get("node_type"), "#7A7A7A") for n in graph.nodes]
+    node_colors = [
+        type_to_color.get(graph.nodes[n].get("node_type"), "#7A7A7A")
+        for n in graph.nodes
+    ]
 
     plt.figure(figsize=(8, 6))
     nx.draw_networkx(

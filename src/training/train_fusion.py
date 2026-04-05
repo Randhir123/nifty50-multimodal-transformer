@@ -32,16 +32,22 @@ class FusionDataset(Dataset[tuple[dict[str, Tensor], Tensor]]):
 
     def __init__(self, arrays: FusionArrays) -> None:
         self._inputs: dict[str, Tensor] = {
-            "tabular_tokens": torch.from_numpy(arrays.tabular_tokens.astype(np.float32, copy=False))
+            "tabular_tokens": torch.from_numpy(
+                arrays.tabular_tokens.astype(np.float32, copy=False)
+            )
         }
         if arrays.image_tokens is not None:
             self._inputs["image_tokens"] = torch.from_numpy(
                 arrays.image_tokens.astype(np.float32, copy=False)
             )
         if arrays.text_tokens is not None:
-            self._inputs["text_tokens"] = torch.from_numpy(arrays.text_tokens.astype(np.float32, copy=False))
+            self._inputs["text_tokens"] = torch.from_numpy(
+                arrays.text_tokens.astype(np.float32, copy=False)
+            )
         if arrays.kg_tokens is not None:
-            self._inputs["kg_tokens"] = torch.from_numpy(arrays.kg_tokens.astype(np.float32, copy=False))
+            self._inputs["kg_tokens"] = torch.from_numpy(
+                arrays.kg_tokens.astype(np.float32, copy=False)
+            )
 
         self._y = torch.from_numpy(arrays.y.astype(np.float32, copy=False))
 
@@ -58,7 +64,9 @@ class FusionDataset(Dataset[tuple[dict[str, Tensor], Tensor]]):
         return item, self._y[index]
 
 
-def load_fusion_arrays(path: str | Path, *, use_image: bool, use_text: bool, use_kg: bool) -> FusionArrays:
+def load_fusion_arrays(
+    path: str | Path, *, use_image: bool, use_text: bool, use_kg: bool
+) -> FusionArrays:
     """Load multimodal arrays from an `.npz` dataset."""
     dataset_path = Path(path)
     if not dataset_path.exists():
@@ -75,7 +83,9 @@ def load_fusion_arrays(path: str | Path, *, use_image: bool, use_text: bool, use
         if not enabled:
             return None
         if name not in data:
-            raise ValueError(f"Requested modality '{name}' but key is missing in dataset")
+            raise ValueError(
+                f"Requested modality '{name}' but key is missing in dataset"
+            )
         return np.asarray(data[name], dtype=np.float32)
 
     return FusionArrays(
@@ -189,16 +199,34 @@ def train_fusion_transformer(args: argparse.Namespace) -> None:
     train_dataset = FusionDataset(train_arrays)
     val_dataset = FusionDataset(val_arrays)
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    train_loader = DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0
+    )
+    val_loader = DataLoader(
+        val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0
+    )
 
-    device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
+    device = torch.device(
+        args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu"
+    )
 
     config = FusionTransformerConfig(
         tabular_dim=train_arrays.tabular_tokens.shape[-1],
-        image_dim=(train_arrays.image_tokens.shape[-1] if train_arrays.image_tokens is not None else None),
-        text_dim=(train_arrays.text_tokens.shape[-1] if train_arrays.text_tokens is not None else None),
-        kg_dim=(train_arrays.kg_tokens.shape[-1] if train_arrays.kg_tokens is not None else None),
+        image_dim=(
+            train_arrays.image_tokens.shape[-1]
+            if train_arrays.image_tokens is not None
+            else None
+        ),
+        text_dim=(
+            train_arrays.text_tokens.shape[-1]
+            if train_arrays.text_tokens is not None
+            else None
+        ),
+        kg_dim=(
+            train_arrays.kg_tokens.shape[-1]
+            if train_arrays.kg_tokens is not None
+            else None
+        ),
         model_dim=args.model_dim,
         num_heads=args.num_heads,
         num_layers=args.num_layers,
@@ -210,7 +238,9 @@ def train_fusion_transformer(args: argparse.Namespace) -> None:
     model = FusionTransformer(config).to(device)
 
     criterion = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
+    )
 
     best_val_f1 = -float("inf")
     checkpoint_path = Path(args.checkpoint_path)
@@ -259,8 +289,14 @@ def train_fusion_transformer(args: argparse.Namespace) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build CLI args for multimodal fusion training."""
     parser = argparse.ArgumentParser(description="Train multimodal fusion Transformer")
-    parser.add_argument("--dataset", type=str, required=True, help="Path to .npz with fusion arrays")
-    parser.add_argument("--checkpoint-path", type=str, default="data/processed/checkpoints/fusion_transformer.pt")
+    parser.add_argument(
+        "--dataset", type=str, required=True, help="Path to .npz with fusion arrays"
+    )
+    parser.add_argument(
+        "--checkpoint-path",
+        type=str,
+        default="data/processed/checkpoints/fusion_transformer.pt",
+    )
 
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=64)
@@ -277,7 +313,9 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pooling", type=str, default="cls", choices=["cls", "mean"])
     parser.add_argument("--max-tokens", type=int, default=4096)
 
-    parser.add_argument("--use-image", action="store_true", help="Enable image modality")
+    parser.add_argument(
+        "--use-image", action="store_true", help="Enable image modality"
+    )
     parser.add_argument("--use-text", action="store_true", help="Enable text modality")
     parser.add_argument("--use-kg", action="store_true", help="Enable KG modality")
     return parser

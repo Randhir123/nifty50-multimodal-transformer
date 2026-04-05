@@ -85,6 +85,28 @@ pip install -e .
 
 ---
 
+## End-to-end demo (post-milestone stabilization)
+
+Run the tiny demo script to exercise the existing `src.app` workflow surface end to end:
+
+```bash
+python scripts/run_e2e_demo.py
+```
+
+Optional: choose a custom artifact directory.
+
+```bash
+python scripts/run_e2e_demo.py --output-dir data/interim/demo
+```
+
+The demo writes:
+
+- `ranked_stocks.csv` (ranked stock output)
+- `embedding_projection.csv` (one embedding projection output)
+- `peer_graph_payload.json` + `peer_graph.png` (one peer graph output)
+
+---
+
 ## Testing and CI
 
 ### Run tests locally

@@ -53,7 +53,9 @@ def resolve_chart_path(
     output_dir: str | Path,
 ) -> Path:
     """Resolve the deterministic filesystem path for a chart image."""
-    return Path(output_dir) / build_chart_filename(symbol=symbol, prediction_date=prediction_date)
+    return Path(output_dir) / build_chart_filename(
+        symbol=symbol, prediction_date=prediction_date
+    )
 
 
 def generate_candlestick_chart(
@@ -123,7 +125,9 @@ def generate_or_resolve_sample_chart(
     frame[date_col] = pd.to_datetime(frame[date_col])
 
     cutoff = pd.Timestamp(prediction_date)
-    window = frame.loc[frame[date_col] <= cutoff].sort_values(date_col).tail(lookback_days)
+    window = (
+        frame.loc[frame[date_col] <= cutoff].sort_values(date_col).tail(lookback_days)
+    )
 
     if len(window) < lookback_days:
         raise ValueError(
@@ -131,7 +135,9 @@ def generate_or_resolve_sample_chart(
             f"need {lookback_days}, got {len(window)}"
         )
 
-    return generate_candlestick_chart(window, output_path=output_path, date_col=date_col)
+    return generate_candlestick_chart(
+        window, output_path=output_path, date_col=date_col
+    )
 
 
 def attach_chart_paths(
@@ -154,7 +160,13 @@ def attach_chart_paths(
     result = samples_df.copy()
     result[date_col] = pd.to_datetime(result[date_col])
     result[chart_col] = [
-        str(resolve_chart_path(symbol=row[symbol_col], prediction_date=row[date_col], output_dir=output_dir))
+        str(
+            resolve_chart_path(
+                symbol=row[symbol_col],
+                prediction_date=row[date_col],
+                output_dir=output_dir,
+            )
+        )
         for _, row in result.iterrows()
     ]
     return result

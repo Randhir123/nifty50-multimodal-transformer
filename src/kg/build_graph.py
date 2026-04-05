@@ -48,13 +48,17 @@ def _normalize_event_records(event_records: pd.DataFrame | None) -> pd.DataFrame
 
     normalized = event_records.loc[:, ["stock_id", "event_date", "event_type"]].copy()
     normalized["stock_id"] = normalized["stock_id"].astype(str).str.strip()
-    normalized["event_type"] = normalized["event_type"].astype(str).str.strip().str.lower()
+    normalized["event_type"] = (
+        normalized["event_type"].astype(str).str.strip().str.lower()
+    )
     normalized["event_date"] = pd.to_datetime(normalized["event_date"]).dt.normalize()
 
-    normalized = normalized.dropna(subset=["event_date"]) \
-        .query("stock_id != '' and event_type != ''") \
-        .drop_duplicates(subset=["stock_id", "event_type", "event_date"]) \
+    normalized = (
+        normalized.dropna(subset=["event_date"])
+        .query("stock_id != '' and event_type != ''")
+        .drop_duplicates(subset=["stock_id", "event_type", "event_date"])
         .sort_values(["stock_id", "event_type", "event_date"])
+    )
 
     return normalized.reset_index(drop=True)
 
@@ -84,7 +88,8 @@ def build_market_knowledge_graph(
     graph = nx.Graph()
 
     normalized_pairs = sorted(
-        (str(stock).strip(), str(sector).strip()) for stock, sector in stock_to_sector.items()
+        (str(stock).strip(), str(sector).strip())
+        for stock, sector in stock_to_sector.items()
     )
     if any(not stock or not sector for stock, sector in normalized_pairs):
         raise ValueError("stock_to_sector cannot contain empty stock or sector IDs")
@@ -121,7 +126,9 @@ def build_market_knowledge_graph(
             *normalized_events["event_type"].tolist(),
         }
     )
-    event_type_universe = [event_type for event_type in event_type_universe if event_type]
+    event_type_universe = [
+        event_type for event_type in event_type_universe if event_type
+    ]
 
     for event_type in event_type_universe:
         event_node = event_type_node_id(event_type)
@@ -129,7 +136,9 @@ def build_market_knowledge_graph(
 
     if not normalized_events.empty:
         grouped = (
-            normalized_events.groupby(["stock_id", "event_type"], as_index=False)["event_date"]
+            normalized_events.groupby(["stock_id", "event_type"], as_index=False)[
+                "event_date"
+            ]
             .apply(list)
             .reset_index(drop=True)
         )
