@@ -348,3 +348,56 @@ Milestone 7 does **not** add graph embeddings yet. Instead, it exposes two integ
 2. **Tokenization path** by converting normalized context fields into KG tokens in a later milestone.
 
 This keeps graph construction/query logic stable while allowing Milestone 8 fusion modules to choose the final representation strategy.
+
+## Verified working paths (stabilization pass)
+
+### Milestone audit: runnable entry points vs module-only components
+
+| Milestone | Status in repository | Runnable entry point today | Notes |
+|---|---|---|---|
+| 2. Data pipeline | Implemented (`src/data/features.py`, `src/data/labels.py`, `src/data/dataset.py`) | ✅ Via smoke tests (`pytest`) and tabular verification script | No dedicated CLI module yet. |
+| 3. Candlestick charts | Implemented (`src/viz/charts.py`) | ✅ Via smoke tests (`pytest`) | Utility API exists; no standalone CLI wrapper. |
+| 4. Tabular Transformer baseline | Implemented | ✅ `python -m src.training.train_tabular ...` and `python scripts/verify_tabular_baseline.py` | End-to-end toy-data verification added. |
+| 5. Image branch | Implemented | ✅ `python -m src.training.train_image ...` | Forward pass and chart generation covered in smoke tests. |
+| 6. Text branch | Implemented | ✅ `python -m src.training.train_text ...` | Lightweight forward-pass smoke test uses `src/models/text.py`; training entry point uses `src/models/text_encoder.py`. |
+| 7. Knowledge augmentation | Implemented (`src/kg/build_graph.py`, `src/kg/query_graph.py`) | ✅ Via smoke tests (`pytest`) | Utility API exists; no standalone CLI wrapper. |
+| 8. Multimodal fusion Transformer | Not implemented | ❌ None | `src/models/fusion.py` is not present. |
+| 9. Visualization | Partially implemented (`src/viz/charts.py`) | ⚠️ Partial (chart utilities only) | Ranking table / peer graph / embedding projection entry points are not present yet. |
+| 10. Operationalization | Not implemented | ❌ None | `src/app` has package scaffold only. |
+
+### Toy data path (no external market data needed)
+
+The repository now includes a tiny synthetic dataset under:
+
+- `data/toy/stock_ohlcv.csv`
+- `data/toy/index_ohlcv.csv`
+- `data/toy/text_records.csv`
+- `data/toy/event_records.csv`
+
+### Commands to verify each component
+
+```bash
+# 1) Run component smoke tests
+pytest tests/test_smoke_components.py
+
+# 2) Run tabular baseline end-to-end verification on toy data
+python scripts/verify_tabular_baseline.py
+
+# 3) (Optional) Run tabular training directly on generated toy artifact
+python -m src.training.train_tabular \
+  --dataset data/processed/verification/toy_rolling_windows.npz \
+  --checkpoint-path data/processed/verification/tabular_from_cli.pt \
+  --epochs 1 --batch-size 8 --device cpu
+```
+
+### What the smoke tests cover
+
+- feature generation
+- label generation
+- rolling-window dataset creation
+- candlestick chart generation
+- tabular Transformer forward pass
+- image branch forward pass
+- text branch forward pass
+- KG context retrieval
+- sample text assembly
