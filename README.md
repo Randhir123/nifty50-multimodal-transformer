@@ -291,3 +291,60 @@ For each `(stock, date)` model sample, `build_company_text_input(...)` applies:
 - The text encoder consumes normalized per-sample strings and is agnostic to the original source type.
 - This keeps preprocessing coursework-scale and modular for later fusion work.
 - PDF-derived text is supported through lightweight direct extraction helpers (no OCR-heavy parsing in this milestone).
+
+## Milestone 7: knowledge augmentation layer
+
+### KG schema (`src/kg/build_graph.py`)
+
+The milestone-7 graph is deliberately lightweight and deterministic.
+
+**Node types**
+- `index` (e.g. `NIFTY50`)
+- `sector` (e.g. `Financials`, `IT`)
+- `stock` (ticker/symbol IDs)
+- `event_type` (e.g. `earnings`, `guidance`, `regulatory_filing`)
+
+**Edge types**
+- `index_contains_sector`
+- `sector_contains_stock`
+- `peer_in_sector` (between stocks in the same sector)
+- `stock_has_event_type` (stores dated event history for flags)
+
+### Example node and edge IDs
+
+- index node: `index:NIFTY50`
+- sector node: `sector:IT`
+- stock node: `stock:TCS`
+- event node: `event_type:earnings`
+
+Example links:
+- `index:NIFTY50 -- sector:IT`
+- `sector:IT -- stock:TCS`
+- `stock:TCS -- stock:INFY` (peer link)
+- `stock:TCS -- event_type:earnings` with `event_dates=[...]`
+
+### KG context retrieval contract (`src/kg/query_graph.py`)
+
+`retrieve_kg_context(...)` returns a normalized dictionary for one `(stock_id, as_of_date)` sample:
+
+- `schema_version`
+- `stock_id`
+- `as_of_date`
+- `index_id`
+- `sector_id`
+- `peer_ids`
+- `peer_count`
+- `peer_avg_recent_return`
+- `sector_avg_recent_return`
+- `event_flags` (dictionary from event type to binary flag)
+
+This payload is deterministic, JSON-serializable, and deployment-friendly for `src/app` workflows.
+
+### How KG context connects to multimodal fusion
+
+Milestone 7 does **not** add graph embeddings yet. Instead, it exposes two integration paths that fusion code can consume later:
+
+1. **Structured feature path** via `kg_context_to_feature_dict(...)` for direct numeric/categorical feature fusion.
+2. **Tokenization path** by converting normalized context fields into KG tokens in a later milestone.
+
+This keeps graph construction/query logic stable while allowing Milestone 8 fusion modules to choose the final representation strategy.
