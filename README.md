@@ -391,6 +391,54 @@ Milestone 7 does **not** add graph embeddings yet. Instead, it exposes two integ
 
 This keeps graph construction/query logic stable while allowing Milestone 8 fusion modules to choose the final representation strategy.
 
+
+## Milestone 8: multimodal fusion Transformer
+
+### Fusion architecture (`src/models/fusion.py`)
+
+`FusionTransformer` is the central multimodal encoder that fuses token/embedding streams from:
+
+- tabular branch tokens (**required**)
+- image branch embeddings or tokens (**optional**)
+- text branch embeddings or tokens (**optional**)
+- KG context features/tokens (**optional**)
+
+Design details:
+
+- each modality has its own input projection to a shared `model_dim`
+- learned modality embeddings mark token origin (tabular/image/text/KG)
+- modality tokens are concatenated into one sequence
+- Transformer encoder layers perform cross-modal interaction
+- output pooling supports either:
+  - learned `CLS` token pooling (default), or
+  - mean pooling
+- final head emits one binary logit per sample
+
+### Supported modality combinations (`src/training/train_fusion.py`)
+
+Fusion training keeps one stable training contract and enables/disables modalities via CLI flags:
+
+- `--use-image` for tabular + image
+- `--use-text` for tabular + text
+- `--use-image --use-text` for tabular + text + image
+- `--use-image --use-text --use-kg` for tabular + text + image + KG
+
+Example:
+
+```bash
+python -m src.training.train_fusion \
+  --dataset data/processed/fusion_samples.npz \
+  --use-image --use-text --use-kg \
+  --checkpoint-path data/processed/checkpoints/fusion_transformer.pt
+```
+
+Expected `.npz` keys:
+
+- required: `tabular_tokens`, `y`, `end_dates`
+- optional (flag-dependent): `image_tokens`, `text_tokens`, `kg_tokens`
+
+`src/training/evaluate.py` metrics are reused directly for train/validation reporting and checkpoint selection.
+
 ## Verified working paths (stabilization pass)
 
 ### Milestone audit: runnable entry points vs module-only components
@@ -403,7 +451,7 @@ This keeps graph construction/query logic stable while allowing Milestone 8 fusi
 | 5. Image branch | Implemented | ✅ `python -m src.training.train_image ...` | Forward pass and chart generation covered in smoke tests. |
 | 6. Text branch | Implemented | ✅ `python -m src.training.train_text ...` | Lightweight forward-pass smoke test uses `src/models/text.py`; training entry point uses `src/models/text_encoder.py`. |
 | 7. Knowledge augmentation | Implemented (`src/kg/build_graph.py`, `src/kg/query_graph.py`) | ✅ Via smoke tests (`pytest`) | Utility API exists; no standalone CLI wrapper. |
-| 8. Multimodal fusion Transformer | Not implemented | ❌ None | `src/models/fusion.py` is not present. |
+| 8. Multimodal fusion Transformer | Implemented (`src/models/fusion.py`, `src/training/train_fusion.py`) | ✅ `python -m src.training.train_fusion ...` | Supports tabular+image, tabular+text, tabular+text+image, tabular+text+image+KG. |
 | 9. Visualization | Partially implemented (`src/viz/charts.py`) | ⚠️ Partial (chart utilities only) | Ranking table / peer graph / embedding projection entry points are not present yet. |
 | 10. Operationalization | Not implemented | ❌ None | `src/app` has package scaffold only. |
 
@@ -440,6 +488,7 @@ python -m src.training.train_tabular \
 - candlestick chart generation
 - tabular Transformer forward pass
 - image branch forward pass
+- fusion Transformer forward pass
 - text branch forward pass
 - KG context retrieval
 - sample text assembly
