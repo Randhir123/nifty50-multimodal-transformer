@@ -452,8 +452,8 @@ Expected `.npz` keys:
 | 6. Text branch | Implemented | ✅ `python -m src.training.train_text ...` | Lightweight forward-pass smoke test uses `src/models/text.py`; training entry point uses `src/models/text_encoder.py`. |
 | 7. Knowledge augmentation | Implemented (`src/kg/build_graph.py`, `src/kg/query_graph.py`) | ✅ Via smoke tests (`pytest`) | Utility API exists; no standalone CLI wrapper. |
 | 8. Multimodal fusion Transformer | Implemented (`src/models/fusion.py`, `src/training/train_fusion.py`) | ✅ `python -m src.training.train_fusion ...` | Supports tabular+image, tabular+text, tabular+text+image, tabular+text+image+KG. |
-| 9. Visualization | Partially implemented (`src/viz/charts.py`) | ⚠️ Partial (chart utilities only) | Ranking table / peer graph / embedding projection entry points are not present yet. |
-| 10. Operationalization | Not implemented | ❌ None | `src/app` has package scaffold only. |
+| 9. Visualization | Implemented (`src/viz/ranking.py`, `src/viz/embeddings.py`, `src/viz/peer_graph.py`) | ✅ Via unit tests and workflow wrappers | Ranking tables, embedding maps, and peer-graph payload/image helpers are available. |
+| 10. Operationalization | Implemented (`src/app/workflows.py`, `src/app/api.py`) | ✅ Python-callable workflows and endpoint-style wrappers | Wraps model inference, KG retrieval, ranking, embeddings, and peer-graph utilities for later API/OpenClaw exposure. |
 
 ### Toy data path (no external market data needed)
 
@@ -563,3 +563,72 @@ Design principles used in this milestone:
 - deterministic ordering and random seeds
 - no coupling to model training loops
 - serialization-friendly outputs for later app/API integration
+
+
+## Milestone 10: operationalization layer
+
+`src/app` now provides a thin operationalization layer that wraps existing model, KG, and visualization components without duplicating core logic. The functions are plain Python-callable entry points now and can be exposed later through REST/queue/agent integrations.
+
+### Workflow entry points (`src/app/workflows.py`)
+
+- `rank_stocks(...)`
+  - Inputs:
+    - `samples: pd.DataFrame` with `stock_id`, `date`
+    - Either `probabilities: np.ndarray` **or** a fusion-compatible `model` + modality tensors
+  - Output:
+    - `RankedStocksResult` containing a ranked dataframe (`stock_id`, `date`, `probability`, `predicted_label`, `rank`)
+  - Uses:
+    - `src/viz/ranking.py` (`build_ranked_predictions`)
+    - Fusion inference contract through `predict_fusion_probabilities(...)`
+
+- `analyze_stock(...)`
+  - Inputs:
+    - `stock_id`, `as_of_date`, ranked predictions dataframe
+    - Optional KG graph and returns dataframe
+  - Output:
+    - `StockAnalysisResult` with one ranking row and optional KG context
+  - Uses:
+    - `src/kg/query_graph.py` (`retrieve_kg_context`)
+
+- `compare_stocks(...)`
+  - Inputs:
+    - list of stock IDs, date, ranked predictions
+    - optional KG graph/returns
+  - Output:
+    - `StockComparisonResult` with a comparison dataframe sorted by rank
+  - Uses:
+    - `analyze_stock(...)` internally (single-stock workflow composition)
+
+- `show_peer_graph(...)`
+  - Inputs:
+    - KG graph, optional `output_path`
+  - Output:
+    - `PeerGraphResult` with payload and optional rendered image path
+  - Uses:
+    - `src/viz/peer_graph.py` (`build_peer_graph_payload`, `plot_peer_graph`)
+
+- `show_embedding_map(...)`
+  - Inputs:
+    - embedding matrix, projection method (`pca` or `tsne`), optional metadata
+  - Output:
+    - `EmbeddingMapResult` containing projected dataframe
+  - Uses:
+    - `src/viz/embeddings.py` (`project_embeddings`)
+
+### Minimal API-like surface (`src/app/api.py`)
+
+`src/app/api.py` adds endpoint-style wrappers (`*_endpoint`) that demonstrate exactly how each workflow would be invoked by a transport layer.
+
+- These wrappers currently return plain Python objects / pandas dataframes, keeping behavior deterministic and demo-friendly.
+- No cloud deployment or OpenClaw runtime wiring is implemented in this milestone by design.
+
+### Intended OpenClaw integration path (later milestone)
+
+This layer is intentionally compatible with later OpenClaw integration by keeping:
+
+- stable, explicit workflow signatures
+- typed result objects
+- JSON-serializable nested payloads where needed (for graph/KG context)
+- separation between orchestration (`src/app`) and core logic (`src/models`, `src/kg`, `src/viz`)
+
+When OpenClaw adapters are added later, they can call these workflows directly instead of re-implementing ranking, KG retrieval, or visualization preparation logic.
