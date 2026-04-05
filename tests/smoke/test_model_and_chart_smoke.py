@@ -7,6 +7,7 @@ import torch
 
 from src.kg.build_graph import build_market_knowledge_graph
 from src.kg.query_graph import retrieve_kg_context
+from src.models.fusion import FusionTransformer, FusionTransformerConfig
 from src.models.image_transformer import ImageTransformer, ImageTransformerConfig
 from src.models.tabular_transformer import TabularTransformer, TabularTransformerConfig
 from src.models.text import CompanyTextTransformer, CompanyTextTransformerConfig
@@ -53,6 +54,29 @@ def test_image_branch_forward_pass_smoke() -> None:
 
     assert logits.shape == (2,)
     assert embeddings.shape == (2, 32)
+
+
+def test_fusion_transformer_forward_pass_smoke() -> None:
+    model = FusionTransformer(
+        FusionTransformerConfig(
+            tabular_dim=8,
+            image_dim=16,
+            text_dim=12,
+            kg_dim=6,
+            model_dim=32,
+            num_heads=4,
+            num_layers=2,
+        )
+    )
+
+    logits = model(
+        tabular_tokens=torch.randn(3, 20, 8),
+        image_tokens=torch.randn(3, 16),
+        text_tokens=torch.randn(3, 5, 12),
+        kg_tokens=torch.randn(3, 6),
+    )
+
+    assert logits.shape == (3,)
 
 
 def test_text_branch_forward_pass_smoke() -> None:
