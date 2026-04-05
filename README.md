@@ -1,6 +1,6 @@
 # Nifty-50 Multimodal Transformer
 
-Predict which Nifty-50 stocks will outperform the index over the next 3 trading days by fusing tabular OHLCV features, candlestick chart images, news/analyst text, and a lightweight knowledge graph.
+Predict which Nifty-50 stocks will outperform the index over the next 3 trading days by fusing tabular OHLCV features, candlestick chart images, multi-source company text (news, filings, guidance, investor materials), and a lightweight knowledge graph.
 
 ---
 
@@ -14,7 +14,7 @@ src/data          ← feature engineering, labels, rolling-window dataset
      │
      ├──► src/models/tabular_transformer.py   ← Transformer on numeric features
      ├──► src/models/image_transformer.py ← lightweight patch Transformer on candlestick charts
-     ├──► src/models/text_encoder.py      ← pre-trained LM encoder on news/analyst text
+     ├──► src/models/text.py      ← encoder on normalized multi-source company text
      └──► src/models/kg.py        ← graph context tokens from src/kg
                 │
                 ▼
@@ -43,7 +43,7 @@ Each branch (tabular, image, text, KG) can be trained independently and fused la
 | 3 | Candlestick charts | `src/data` → `data/interim/charts/` |
 | 4 | Tabular Transformer baseline | `src/models/tabular_transformer.py`, `src/training/train_tabular.py`, `src/training/evaluate.py` |
 | 5 | Image branch | `src/models/image_transformer.py`, `src/training/train_image.py` |
-| 6 | Text branch | `src/models/text_encoder.py`, `src/training/train_text.py` |
+| 6 | Text branch (multi-source company text) | `src/models/text.py`, `src/data/text.py` |
 | 7 | Knowledge augmentation | `src/kg` |
 | 8 | Multimodal fusion Transformer | `src/models/fusion.py` |
 | 9 | Visualisation | `src/viz` |
@@ -257,39 +257,37 @@ What it includes:
 
 This milestone intentionally trains only the image branch. The model already exposes a clean embedding interface (`encode_images`) so fusion modules can later consume image embeddings alongside tabular/text/KG embeddings without changing chart preprocessing or training data contracts.
 
-## Milestone 6: stock-news text branch
 
-### Text branch architecture (`src/models/text_encoder.py`)
+## Milestone 6: multi-source company text branch
 
-- Input is one string per sample, where each string concatenates the top **3-5 most recent headlines**.
-- Hugging Face tokenizer + pretrained encoder backbone (default: `distilbert-base-uncased`).
-- Lightweight pooling (`mean` over valid tokens by default, optional `CLS`) to produce one embedding per sample.
-- Binary classification head returns one logit per sample.
-- `encode_texts(...)` exposes per-sample embeddings (`[batch, hidden_dim]`) for future fusion wiring.
+### Normalized company-text schema (`src/data/text.py`)
 
-### Expected text sample schema
+The text modality now uses one source-agnostic record schema:
 
-Text-branch training expects a sample-level table (`.csv` or `.parquet`) with:
+- `stock_id`
+- `event_date`
+- `source_type`
+- `title`
+- `body_text`
 
-- `date`: sample prediction date (used for chronological splitting)
-- `text`: pre-concatenated headline string (top 3-5 recent headlines per sample)
-- `label`: project binary target (`1` if stock outperforms index over next 3 days, else `0`)
+Supported source categories include (non-exhaustive):
 
-### Text training entry point
+- news headlines/articles
+- stock exchange filings
+- management guidance updates
+- investor presentation text
+- other company-related text records
 
-```bash
-python -m src.training.train_text \
-  --samples data/processed/text_samples.csv \
-  --checkpoint-path data/processed/checkpoints/text_encoder.pt
-```
+### Per-sample text construction
 
-What it includes:
-- sample-level time-based train/validation split using `date`
-- text-only dataset wrapper for `date`/`text`/`label`
-- train + validation loops with BCE-with-logits
-- metric computation via `src/training/evaluate.py`
-- best-checkpoint saving by validation F1
+For each `(stock, date)` model sample, `build_company_text_input(...)` applies:
 
-### Planned connection to multimodal fusion
+1. filter records with `event_date <= date`
+2. sort by descending recency
+3. concatenate top-k records into one model-ready input string
 
-This milestone intentionally keeps KG and multimodal fusion out-of-scope. The text branch now provides a stable embedding contract via `encode_texts(...)`, so later fusion modules can combine tabular, image, text, and KG embeddings without changing text preprocessing or table schema.
+### Text encoder expectations (`src/models/text.py`)
+
+- The text encoder consumes normalized per-sample strings and is agnostic to the original source type.
+- This keeps preprocessing coursework-scale and modular for later fusion work.
+- PDF-derived text is supported through lightweight direct extraction helpers (no OCR-heavy parsing in this milestone).

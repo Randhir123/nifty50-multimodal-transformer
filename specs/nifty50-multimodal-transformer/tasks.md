@@ -28,10 +28,12 @@
 * implement candlestick image encoder
 * train image-only classifier
 
-## Milestone 6 — Text branch
+## Milestone 6 — Text branch (multi-source company text)
 
-* add text schema
-* implement text encoder path
+* add normalized company-text schema (`stock_id`, `event_date`, `source_type`, `title`, `body_text`)
+* build `(stock, date)` text inputs from records with `event_date <= date`, recency sort, and top-k concat
+* implement source-agnostic text encoder path
+* add lightweight PDF text extraction support (non-OCR)
 * train text-only classifier
 
 ## Milestone 7 — Knowledge augmentation
