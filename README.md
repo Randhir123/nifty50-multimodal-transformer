@@ -13,7 +13,7 @@ Raw OHLCV CSV
 src/data          ← feature engineering, labels, rolling-window dataset
      │
      ├──► src/models/tabular_transformer.py   ← Transformer on numeric features
-     ├──► src/models/image.py     ← CNN/ViT encoder on 60-day candlestick charts
+     ├──► src/models/image_transformer.py ← lightweight patch Transformer on candlestick charts
      ├──► src/models/text.py      ← pre-trained LM encoder on news/analyst text
      └──► src/models/kg.py        ← graph context tokens from src/kg
                 │
@@ -42,7 +42,7 @@ Each branch (tabular, image, text, KG) can be trained independently and fused la
 | 2 | Data pipeline | `src/data` |
 | 3 | Candlestick charts | `src/data` → `data/interim/charts/` |
 | 4 | Tabular Transformer baseline | `src/models/tabular_transformer.py`, `src/training/train_tabular.py`, `src/training/evaluate.py` |
-| 5 | Image branch | `src/models/image.py` |
+| 5 | Image branch | `src/models/image_transformer.py`, `src/training/train_image.py` |
 | 6 | Text branch | `src/models/text.py` |
 | 7 | Knowledge augmentation | `src/kg` |
 | 8 | Multimodal fusion Transformer | `src/models/fusion.py` |
@@ -213,3 +213,46 @@ Use metric utility in `src/training/evaluate.py`:
 - ROC-AUC
 
 This tabular baseline is intentionally lightweight and modular so it can be reused from API workflows (`src/app`) or batch jobs and extended later for multimodal fusion.
+
+
+## Milestone 5: candlestick image branch
+
+### Image branch architecture (`src/models/image_transformer.py`)
+
+- Input tensor shape: **`[batch, 3, image_size, image_size]`**
+- Patch embedding via `Conv2d(kernel_size=patch_size, stride=patch_size)`
+- Learnable `CLS` token + sinusoidal positional encoding
+- Lightweight `nn.TransformerEncoder` stack (default: 2 layers)
+- Binary head returns one logit per sample
+- `encode_images(...)` exposes per-sample embeddings (`[batch, model_dim]`) for later fusion wiring
+
+### Expected chart input format
+
+Image-branch training expects a sample-level table (`.csv` or `.parquet`) with:
+
+- `date`: sample prediction date (used for chronological splitting)
+- `chart_path`: image file path generated using `src/viz/charts.py` conventions
+- `label`: project binary target (`1` if stock outperforms index over next 3 days, else `0`)
+
+Recommended chart path pattern remains:
+
+- `{output_dir}/{SYMBOL}_{YYYYMMDD}.png`
+
+### Image training entry point
+
+```bash
+python -m src.training.train_image \
+  --samples data/processed/image_samples.csv \
+  --checkpoint-path data/processed/checkpoints/image_transformer.pt
+```
+
+What it includes:
+- sample-level time-based train/validation split using `date`
+- image-only dataset wrapper with minimal preprocessing (RGB read + resize + float conversion)
+- train + validation loops with BCE-with-logits
+- metric computation via `src/training/evaluate.py`
+- best-checkpoint saving by validation F1
+
+### Planned connection to multimodal fusion
+
+This milestone intentionally trains only the image branch. The model already exposes a clean embedding interface (`encode_images`) so fusion modules can later consume image embeddings alongside tabular/text/KG embeddings without changing chart preprocessing or training data contracts.
