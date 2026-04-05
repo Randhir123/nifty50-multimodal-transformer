@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import json
+from datetime import date
 from pathlib import Path
 
 import numpy as np
@@ -32,7 +33,6 @@ from src.viz.charts import generate_or_resolve_sample_chart
 DEFAULT_TICKERS = ("RELIANCE.NS", "TCS.NS", "INFY.NS")
 DEFAULT_BENCHMARK = "^NSEI"
 DEFAULT_START = "2023-01-01"
-DEFAULT_END = "2025-01-01"
 DEFAULT_WINDOW_SIZE = 20
 FEATURE_COLS = [
     "log_return_1d",
@@ -56,10 +56,15 @@ def _load_or_download_csv(
     start: str,
     end: str,
     interval: str,
+    force_refresh: bool,
 ) -> tuple[pd.DataFrame, Path, bool]:
-    """Return OHLCV dataframe from cache, downloading only if cache is absent."""
+    """Return OHLCV dataframe from cache, downloading when missing/forced.
+
+    Returns:
+        (df, csv_path, refreshed) where refreshed=True means a fresh download was used.
+    """
     csv_path = deterministic_csv_path_for_ticker(ticker, output_dir=raw_dir)
-    if csv_path.exists():
+    if csv_path.exists() and not force_refresh:
         df = pd.read_csv(csv_path)
         df["date"] = pd.to_datetime(df["date"])
         return df, csv_path, False
@@ -75,18 +80,23 @@ def run_real_data_smoke_test(args: argparse.Namespace) -> None:
     chart_dir = output_dir / "charts"
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    resolved_end = args.end or date.today().isoformat()
+    refresh_label = "enabled" if args.force_refresh else "disabled"
+    print(f"End date used for downloads: {resolved_end} (force refresh: {refresh_label})")
+
     universe = list(args.tickers)
-    benchmark_df, benchmark_path, benchmark_downloaded = _load_or_download_csv(
+    benchmark_df, benchmark_path, benchmark_refreshed = _load_or_download_csv(
         args.benchmark,
         raw_dir=raw_dir,
         start=args.start,
-        end=args.end,
+        end=resolved_end,
         interval=args.interval,
+        force_refresh=args.force_refresh,
     )
 
     print(
         f"Benchmark {args.benchmark} -> {benchmark_path} "
-        f"({'downloaded' if benchmark_downloaded else 'cached'})"
+        f"({'refreshed' if benchmark_refreshed else 'cached'})"
     )
 
     ranking_rows: list[dict[str, str]] = []
@@ -94,14 +104,15 @@ def run_real_data_smoke_test(args: argparse.Namespace) -> None:
     stock_summaries: list[dict[str, object]] = []
 
     for ticker in universe:
-        stock_df, stock_path, downloaded = _load_or_download_csv(
+        stock_df, stock_path, refreshed = _load_or_download_csv(
             ticker,
             raw_dir=raw_dir,
             start=args.start,
-            end=args.end,
+            end=resolved_end,
             interval=args.interval,
+            force_refresh=args.force_refresh,
         )
-        print(f"Stock {ticker} -> {stock_path} ({'downloaded' if downloaded else 'cached'})")
+        print(f"Stock {ticker} -> {stock_path} ({'refreshed' if refreshed else 'cached'})")
 
         featured = compute_technical_features(stock_df, benchmark_df)
         labeled = generate_outperformance_label(featured)
@@ -137,7 +148,7 @@ def run_real_data_smoke_test(args: argparse.Namespace) -> None:
             {
                 "stock": ticker,
                 "source_csv": str(stock_path),
-                "source_mode": "downloaded" if downloaded else "cached",
+                "source_mode": "refreshed" if refreshed else "cached",
                 "num_feature_rows": int(len(featured)),
                 "num_labeled_rows": int(len(labeled)),
                 "num_rolling_samples": int(windows.X.shape[0]),
@@ -159,16 +170,19 @@ def run_real_data_smoke_test(args: argparse.Namespace) -> None:
     summary_path = output_dir / "real_data_smoke_summary.json"
     ranking_payload["ranking"].to_csv(ranking_path, index=False)
 
+    latest_sample_date = str(ranking_payload["ranking"]["date"].max())
+
     summary_payload = {
         "tickers": universe,
         "benchmark": args.benchmark,
         "benchmark_csv": str(benchmark_path),
-        "benchmark_mode": "downloaded" if benchmark_downloaded else "cached",
+        "benchmark_mode": "refreshed" if benchmark_refreshed else "cached",
         "start": args.start,
-        "end": args.end,
+        "end": resolved_end,
         "interval": args.interval,
         "window_size": args.window_size,
         "feature_columns": FEATURE_COLS,
+        "latest_ranking_sample_date": latest_sample_date,
         "stocks": stock_summaries,
         "ranking_csv": str(ranking_path),
     }
@@ -177,6 +191,7 @@ def run_real_data_smoke_test(args: argparse.Namespace) -> None:
     print("Real-data smoke test completed successfully.")
     print(f"- Ranking output: {ranking_path}")
     print(f"- Summary output: {summary_path}")
+    print(f"- Latest ranking sample date: {latest_sample_date}")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -196,7 +211,12 @@ def build_parser() -> argparse.ArgumentParser:
         help="Benchmark index ticker (default: ^NSEI)",
     )
     parser.add_argument("--start", type=str, default=DEFAULT_START, help="Start date YYYY-MM-DD")
-    parser.add_argument("--end", type=str, default=DEFAULT_END, help="End date YYYY-MM-DD")
+    parser.add_argument(
+        "--end",
+        type=str,
+        default=None,
+        help="End date YYYY-MM-DD (default: today's date)",
+    )
     parser.add_argument("--interval", type=str, default="1d", help="yfinance interval")
     parser.add_argument(
         "--window-size",
@@ -215,6 +235,11 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         default=Path("data/interim/real_data_smoke"),
         help="Directory where smoke-test artifacts are written",
+    )
+    parser.add_argument(
+        "--force-refresh",
+        action="store_true",
+        help="Ignore cached CSVs and refresh OHLCV data from yfinance",
     )
     return parser
 

@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import re
+from datetime import date
 from pathlib import Path
 from typing import Iterable
 
@@ -19,6 +20,11 @@ import yfinance as yf
 PROJECT_OHLCV_COLUMNS: tuple[str, ...] = ("date", "open", "high", "low", "close", "volume")
 DEFAULT_TICKER_FILE = Path("config/nifty50_full.txt")
 DEFAULT_OUTPUT_DIR = Path("data/raw")
+
+
+def resolve_end_date(end: str | None) -> str:
+    """Resolve optional end date to YYYY-MM-DD, defaulting to today's date."""
+    return end or date.today().isoformat()
 
 
 def read_tickers_from_file(path: str | Path) -> list[str]:
@@ -235,7 +241,12 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--benchmark", type=str, default=None, help="Optional benchmark ticker (e.g. ^NSEI)")
     parser.add_argument("--start", type=str, required=True, help="Start date (YYYY-MM-DD)")
-    parser.add_argument("--end", type=str, required=True, help="End date (YYYY-MM-DD)")
+    parser.add_argument(
+        "--end",
+        type=str,
+        default=None,
+        help="End date (YYYY-MM-DD, default: today's date)",
+    )
     parser.add_argument("--interval", type=str, default="1d", help="yfinance interval (default: 1d)")
     parser.add_argument("--output-dir", type=str, default=str(DEFAULT_OUTPUT_DIR), help="CSV output directory")
     return parser.parse_args()
@@ -250,10 +261,13 @@ def main() -> None:
         default_ticker_file=DEFAULT_TICKER_FILE,
     )
 
+    resolved_end = resolve_end_date(args.end)
+    print(f"Using end date: {resolved_end}")
+
     ticker_data = download_multiple_tickers(
         tickers,
         start=args.start,
-        end=args.end,
+        end=resolved_end,
         interval=args.interval,
     )
 
@@ -265,7 +279,7 @@ def main() -> None:
         benchmark_df = download_benchmark_data(
             args.benchmark,
             start=args.start,
-            end=args.end,
+            end=resolved_end,
             interval=args.interval,
         )
         benchmark_path = save_ticker_csv(args.benchmark, benchmark_df, output_dir=args.output_dir)
