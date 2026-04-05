@@ -52,12 +52,20 @@ class FusionTransformer(nn.Module):
         self.config = config
         self.tabular_projection = nn.Linear(config.tabular_dim, config.model_dim)
         self.image_projection = (
-            nn.Linear(config.image_dim, config.model_dim) if config.image_dim is not None else None
+            nn.Linear(config.image_dim, config.model_dim)
+            if config.image_dim is not None
+            else None
         )
         self.text_projection = (
-            nn.Linear(config.text_dim, config.model_dim) if config.text_dim is not None else None
+            nn.Linear(config.text_dim, config.model_dim)
+            if config.text_dim is not None
+            else None
         )
-        self.kg_projection = nn.Linear(config.kg_dim, config.model_dim) if config.kg_dim is not None else None
+        self.kg_projection = (
+            nn.Linear(config.kg_dim, config.model_dim)
+            if config.kg_dim is not None
+            else None
+        )
 
         self.modality_embedding = nn.Embedding(4, config.model_dim)
 
@@ -97,7 +105,14 @@ class FusionTransformer(nn.Module):
             return x
         raise ValueError(f"{name} must be 2D or 3D, got shape {tuple(x.shape)}")
 
-    def _encode_modality(self, x: Tensor | None, *, projection: nn.Linear | None, modality_id: int, name: str) -> Tensor | None:
+    def _encode_modality(
+        self,
+        x: Tensor | None,
+        *,
+        projection: nn.Linear | None,
+        modality_id: int,
+        name: str,
+    ) -> Tensor | None:
         if x is None:
             return None
         if projection is None:
@@ -156,7 +171,11 @@ class FusionTransformer(nn.Module):
         )
 
         token_blocks = [tabular_encoded]
-        token_blocks.extend(block for block in (image_encoded, text_encoded, kg_encoded) if block is not None)
+        token_blocks.extend(
+            block
+            for block in (image_encoded, text_encoded, kg_encoded)
+            if block is not None
+        )
         tokens = torch.cat(token_blocks, dim=1)
 
         if self.config.pooling == "cls":
@@ -171,5 +190,7 @@ class FusionTransformer(nn.Module):
         tokens = self.positional_encoding(tokens)
         encoded = self.encoder(tokens)
 
-        pooled = encoded[:, 0, :] if self.config.pooling == "cls" else encoded.mean(dim=1)
+        pooled = (
+            encoded[:, 0, :] if self.config.pooling == "cls" else encoded.mean(dim=1)
+        )
         return self.classifier(self.dropout(pooled)).squeeze(-1)

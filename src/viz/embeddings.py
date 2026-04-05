@@ -26,7 +26,9 @@ def _ensure_2d_embeddings(embeddings: np.ndarray) -> np.ndarray:
     return arr
 
 
-def _normalize_metadata(metadata: pd.DataFrame | None, *, n_samples: int) -> pd.DataFrame:
+def _normalize_metadata(
+    metadata: pd.DataFrame | None, *, n_samples: int
+) -> pd.DataFrame:
     if metadata is None:
         return pd.DataFrame({"sample_id": np.arange(n_samples, dtype=np.int64)})
 

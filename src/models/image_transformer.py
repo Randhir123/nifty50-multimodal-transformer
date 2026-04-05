@@ -86,7 +86,9 @@ class ImageTransformer(nn.Module):
     def encode_images(self, x: Tensor) -> Tensor:
         """Encode image tensor and return one embedding per sample."""
         if x.ndim != 4:
-            raise ValueError(f"Expected x as [batch, channels, height, width], got {tuple(x.shape)}")
+            raise ValueError(
+                f"Expected x as [batch, channels, height, width], got {tuple(x.shape)}"
+            )
         if x.shape[-2:] != (self.config.image_size, self.config.image_size):
             raise ValueError(
                 "Input image size mismatch. "

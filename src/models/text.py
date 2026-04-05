@@ -48,7 +48,9 @@ class HashTextTokenizer:
             ids.extend([self.pad_id] * (max_length - len(ids)))
         return ids
 
-    def batch_encode(self, texts: list[str], *, max_length: int) -> tuple[Tensor, Tensor]:
+    def batch_encode(
+        self, texts: list[str], *, max_length: int
+    ) -> tuple[Tensor, Tensor]:
         if not texts:
             raise ValueError("texts must not be empty")
         all_ids = [self.encode(t or "", max_length=max_length) for t in texts]
@@ -80,7 +82,9 @@ class CompanyTextTransformer(nn.Module):
         self.config = config
         self.tokenizer = HashTextTokenizer(vocab_size=config.vocab_size)
 
-        self.embedding = nn.Embedding(config.vocab_size, config.model_dim, padding_idx=0)
+        self.embedding = nn.Embedding(
+            config.vocab_size, config.model_dim, padding_idx=0
+        )
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.model_dim))
 
         self.positional_encoding = SinusoidalPositionalEncoding(
@@ -109,10 +113,14 @@ class CompanyTextTransformer(nn.Module):
         """Tokenize normalized per-sample company text strings."""
         return self.tokenizer.batch_encode(texts, max_length=self.config.max_length)
 
-    def encode_tokens(self, input_ids: Tensor, attention_mask: Tensor | None = None) -> Tensor:
+    def encode_tokens(
+        self, input_ids: Tensor, attention_mask: Tensor | None = None
+    ) -> Tensor:
         """Encode token IDs and return one embedding per sample."""
         if input_ids.ndim != 2:
-            raise ValueError(f"Expected input_ids shape [batch, seq], got {tuple(input_ids.shape)}")
+            raise ValueError(
+                f"Expected input_ids shape [batch, seq], got {tuple(input_ids.shape)}"
+            )
 
         token_embeddings = self.embedding(input_ids)
 
@@ -123,7 +131,9 @@ class CompanyTextTransformer(nn.Module):
         if attention_mask is not None:
             if attention_mask.shape != input_ids.shape:
                 raise ValueError("attention_mask shape must match input_ids")
-            cls_mask = torch.ones((attention_mask.size(0), 1), device=attention_mask.device)
+            cls_mask = torch.ones(
+                (attention_mask.size(0), 1), device=attention_mask.device
+            )
             key_padding_mask = torch.cat([cls_mask, attention_mask], dim=1) == 0
         else:
             key_padding_mask = None
@@ -146,8 +156,12 @@ class CompanyTextTransformer(nn.Module):
         input_ids, attention_mask = self.tokenize_texts(texts)
         return self.encode_tokens(input_ids=input_ids, attention_mask=attention_mask)
 
-    def forward(self, input_ids: Tensor, attention_mask: Tensor | None = None) -> Tensor:
+    def forward(
+        self, input_ids: Tensor, attention_mask: Tensor | None = None
+    ) -> Tensor:
         """Return one binary logit per sample."""
-        embeddings = self.encode_tokens(input_ids=input_ids, attention_mask=attention_mask)
+        embeddings = self.encode_tokens(
+            input_ids=input_ids, attention_mask=attention_mask
+        )
         logits = self.classifier(self.dropout(embeddings)).squeeze(-1)
         return logits

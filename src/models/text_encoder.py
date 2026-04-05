@@ -40,7 +40,9 @@ class TextEncoder(nn.Module):
         self.dropout = nn.Dropout(config.dropout)
         self.classifier = nn.Linear(self.backbone.config.hidden_size, 1)
 
-    def _tokenize(self, texts: Sequence[str], *, device: torch.device) -> dict[str, Tensor]:
+    def _tokenize(
+        self, texts: Sequence[str], *, device: torch.device
+    ) -> dict[str, Tensor]:
         if len(texts) == 0:
             raise ValueError("texts must not be empty")
 
@@ -53,7 +55,9 @@ class TextEncoder(nn.Module):
         )
         return {k: v.to(device) for k, v in encoded.items()}
 
-    def _pool_sequence(self, outputs: BaseModelOutput, attention_mask: Tensor) -> Tensor:
+    def _pool_sequence(
+        self, outputs: BaseModelOutput, attention_mask: Tensor
+    ) -> Tensor:
         token_embeddings = outputs.last_hidden_state
         if token_embeddings.ndim != 3:
             raise ValueError("Unexpected hidden-state shape from text backbone")

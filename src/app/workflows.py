@@ -104,7 +104,9 @@ def rank_stocks(
             kg_tokens=kg_tokens,
         )
 
-    ranking = build_ranked_predictions(samples=samples, probabilities=probabilities, threshold=threshold)
+    ranking = build_ranked_predictions(
+        samples=samples, probabilities=probabilities, threshold=threshold
+    )
     return RankedStocksResult(ranking=ranking)
 
 
@@ -124,9 +126,13 @@ def analyze_stock(
     rank_scope = ranked_predictions.copy()
     rank_scope["date"] = pd.to_datetime(rank_scope["date"]).dt.normalize()
 
-    mask = (rank_scope["stock_id"].astype(str) == str(stock_id)) & (rank_scope["date"] == date)
+    mask = (rank_scope["stock_id"].astype(str) == str(stock_id)) & (
+        rank_scope["date"] == date
+    )
     if not mask.any():
-        raise KeyError(f"No ranked prediction found for stock_id={stock_id} on date={date.date().isoformat()}")
+        raise KeyError(
+            f"No ranked prediction found for stock_id={stock_id} on date={date.date().isoformat()}"
+        )
 
     row = rank_scope.loc[mask].sort_values("rank").iloc[0].to_dict()
     kg_context = None
@@ -188,11 +194,17 @@ def compare_stocks(
         if analysis.kg_context is not None:
             row["sector_id"] = analysis.kg_context["sector_id"]
             row["peer_count"] = analysis.kg_context["peer_count"]
-            row["peer_avg_recent_return"] = analysis.kg_context["peer_avg_recent_return"]
+            row["peer_avg_recent_return"] = analysis.kg_context[
+                "peer_avg_recent_return"
+            ]
         rows.append(row)
 
-    comparison = pd.DataFrame(rows).sort_values(["rank", "stock_id"]).reset_index(drop=True)
-    return StockComparisonResult(as_of_date=date.date().isoformat(), comparison=comparison)
+    comparison = (
+        pd.DataFrame(rows).sort_values(["rank", "stock_id"]).reset_index(drop=True)
+    )
+    return StockComparisonResult(
+        as_of_date=date.date().isoformat(), comparison=comparison
+    )
 
 
 def show_peer_graph(

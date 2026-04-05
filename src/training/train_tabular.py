@@ -29,7 +29,9 @@ class NumpyRollingWindowDataset(Dataset[tuple[Tensor, Tensor]]):
 
     def __init__(self, X: np.ndarray, y: np.ndarray) -> None:
         if X.ndim != 3:
-            raise ValueError(f"X must be 3D [num_samples, window_len, feature_dim], got {X.shape}")
+            raise ValueError(
+                f"X must be 3D [num_samples, window_len, feature_dim], got {X.shape}"
+            )
         if y.ndim != 1:
             raise ValueError(f"y must be 1D [num_samples], got {y.shape}")
         if X.shape[0] != y.shape[0]:
@@ -82,8 +84,12 @@ def time_based_split(
     if split_idx <= 0 or split_idx >= len(X):
         raise ValueError("Split produced empty train or validation set")
 
-    train = RollingWindowArrays(X=X[:split_idx], y=y[:split_idx], end_dates=end_dates[:split_idx])
-    val = RollingWindowArrays(X=X[split_idx:], y=y[split_idx:], end_dates=end_dates[split_idx:])
+    train = RollingWindowArrays(
+        X=X[:split_idx], y=y[:split_idx], end_dates=end_dates[:split_idx]
+    )
+    val = RollingWindowArrays(
+        X=X[split_idx:], y=y[split_idx:], end_dates=end_dates[split_idx:]
+    )
     return train, val
 
 
@@ -154,7 +160,9 @@ def train_tabular_transformer(args: argparse.Namespace) -> None:
         num_workers=0,
     )
 
-    device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
+    device = torch.device(
+        args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu"
+    )
 
     config = TabularTransformerConfig(
         feature_dim=train_arrays.X.shape[-1],
@@ -169,7 +177,9 @@ def train_tabular_transformer(args: argparse.Namespace) -> None:
     model = TabularTransformer(config).to(device)
 
     criterion = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
+    )
 
     best_val_f1 = -float("inf")
     checkpoint_path = Path(args.checkpoint_path)
@@ -218,8 +228,14 @@ def train_tabular_transformer(args: argparse.Namespace) -> None:
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build CLI args for tabular baseline training."""
     parser = argparse.ArgumentParser(description="Train tabular Transformer baseline")
-    parser.add_argument("--dataset", type=str, required=True, help="Path to .npz with X, y, end_dates")
-    parser.add_argument("--checkpoint-path", type=str, default="data/processed/checkpoints/tabular_transformer.pt")
+    parser.add_argument(
+        "--dataset", type=str, required=True, help="Path to .npz with X, y, end_dates"
+    )
+    parser.add_argument(
+        "--checkpoint-path",
+        type=str,
+        default="data/processed/checkpoints/tabular_transformer.pt",
+    )
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--learning-rate", type=float, default=1e-3)

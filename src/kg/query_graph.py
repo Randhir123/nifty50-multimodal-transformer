@@ -53,7 +53,8 @@ def _recent_stock_return(
     lookback_periods: int,
 ) -> float | None:
     scope = returns.loc[
-        (returns["stock_id"] == stock_id) & (returns["date"] <= as_of_date), ["date", "recent_return"]
+        (returns["stock_id"] == stock_id) & (returns["date"] <= as_of_date),
+        ["date", "recent_return"],
     ].sort_values("date")
     if scope.empty:
         return None
@@ -92,7 +93,9 @@ def get_stock_sector_id(graph: nx.Graph, *, stock_id: str) -> str:
         if graph.nodes[n].get("node_type") == "sector"
     ]
     if len(sectors) != 1:
-        raise ValueError(f"Expected exactly one sector for stock_id={stock_id}, got {sectors}")
+        raise ValueError(
+            f"Expected exactly one sector for stock_id={stock_id}, got {sectors}"
+        )
     return sectors[0]
 
 
@@ -103,7 +106,8 @@ def get_peer_ids(graph: nx.Graph, *, stock_id: str) -> list[str]:
     peers = [
         graph.nodes[n]["entity_id"]
         for n in graph.neighbors(sector_node)
-        if graph.nodes[n].get("node_type") == "stock" and graph.nodes[n].get("entity_id") != stock_id
+        if graph.nodes[n].get("node_type") == "stock"
+        and graph.nodes[n].get("entity_id") != stock_id
     ]
     return sorted(peers)
 
@@ -188,7 +192,9 @@ def retrieve_kg_context(
         if sid != stock_id:
             peer_returns.append(avg_recent)
 
-    peer_avg_recent_return = float(sum(peer_returns) / len(peer_returns)) if peer_returns else None
+    peer_avg_recent_return = (
+        float(sum(peer_returns) / len(peer_returns)) if peer_returns else None
+    )
     sector_avg_recent_return = (
         float(sum(sector_returns) / len(sector_returns)) if sector_returns else None
     )

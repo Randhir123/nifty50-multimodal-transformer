@@ -22,7 +22,9 @@ from src.training.evaluate import compute_binary_classification_metrics
 class CandlestickImageDataset(Dataset[tuple[Tensor, Tensor]]):
     """Torch dataset for candlestick chart image paths and binary labels."""
 
-    def __init__(self, image_paths: np.ndarray, labels: np.ndarray, *, image_size: int) -> None:
+    def __init__(
+        self, image_paths: np.ndarray, labels: np.ndarray, *, image_size: int
+    ) -> None:
         if image_paths.ndim != 1:
             raise ValueError("image_paths must be 1D")
         if labels.ndim != 1:
@@ -185,13 +187,23 @@ def train_image_branch(args: argparse.Namespace) -> None:
     )
     train_arrays, val_arrays = time_based_split(arrays, val_fraction=args.val_fraction)
 
-    train_dataset = CandlestickImageDataset(train_arrays.image_paths, train_arrays.y, image_size=args.image_size)
-    val_dataset = CandlestickImageDataset(val_arrays.image_paths, val_arrays.y, image_size=args.image_size)
+    train_dataset = CandlestickImageDataset(
+        train_arrays.image_paths, train_arrays.y, image_size=args.image_size
+    )
+    val_dataset = CandlestickImageDataset(
+        val_arrays.image_paths, val_arrays.y, image_size=args.image_size
+    )
 
-    train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
-    val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0)
+    train_loader = DataLoader(
+        train_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0
+    )
+    val_loader = DataLoader(
+        val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0
+    )
 
-    device = torch.device(args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu")
+    device = torch.device(
+        args.device if torch.cuda.is_available() or args.device == "cpu" else "cpu"
+    )
 
     config = ImageTransformerConfig(
         image_size=args.image_size,
@@ -205,7 +217,9 @@ def train_image_branch(args: argparse.Namespace) -> None:
     model = ImageTransformer(config).to(device)
 
     criterion = torch.nn.BCEWithLogitsLoss()
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay)
+    optimizer = torch.optim.AdamW(
+        model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
+    )
 
     best_val_f1 = -float("inf")
     checkpoint_path = Path(args.checkpoint_path)
@@ -253,14 +267,25 @@ def train_image_branch(args: argparse.Namespace) -> None:
 
 def build_arg_parser() -> argparse.ArgumentParser:
     """Build CLI args for image branch training."""
-    parser = argparse.ArgumentParser(description="Train candlestick image Transformer branch")
-    parser.add_argument("--samples", type=str, required=True, help="CSV/Parquet with date, chart_path, label")
+    parser = argparse.ArgumentParser(
+        description="Train candlestick image Transformer branch"
+    )
+    parser.add_argument(
+        "--samples",
+        type=str,
+        required=True,
+        help="CSV/Parquet with date, chart_path, label",
+    )
     parser.add_argument("--image-path-col", type=str, default="chart_path")
     parser.add_argument("--label-col", type=str, default="label")
     parser.add_argument("--date-col", type=str, default="date")
     parser.add_argument("--require-existing-files", action="store_true")
 
-    parser.add_argument("--checkpoint-path", type=str, default="data/processed/checkpoints/image_transformer.pt")
+    parser.add_argument(
+        "--checkpoint-path",
+        type=str,
+        default="data/processed/checkpoints/image_transformer.pt",
+    )
     parser.add_argument("--epochs", type=int, default=20)
     parser.add_argument("--batch-size", type=int, default=32)
     parser.add_argument("--learning-rate", type=float, default=1e-3)

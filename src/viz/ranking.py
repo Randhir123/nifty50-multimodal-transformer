@@ -36,11 +36,15 @@ def build_ranked_predictions(
     out["probability"] = probs
     out["predicted_label"] = (out["probability"] >= threshold).astype(np.int64)
 
-    out = out.sort_values([date_col, "probability", stock_col], ascending=[True, False, True])
+    out = out.sort_values(
+        [date_col, "probability", stock_col], ascending=[True, False, True]
+    )
     out["rank"] = (
         out.groupby(date_col, sort=True)["probability"]
         .rank(method="first", ascending=False)
         .astype(np.int64)
     )
 
-    return out.rename(columns={stock_col: "stock_id", date_col: "date"}).reset_index(drop=True)
+    return out.rename(columns={stock_col: "stock_id", date_col: "date"}).reset_index(
+        drop=True
+    )
