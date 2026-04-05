@@ -256,6 +256,45 @@ python -m src.data.download_yfinance --start 2022-01-01 --end 2025-01-01
 
 If `config/nifty50_full.txt` is missing, the command fails with a clear error.
 
+## Real data smoke test
+
+Use the smoke-test script to verify the real-data path end to end on a tiny universe:
+
+- prefers already cached OHLCV CSVs under `data/raw/` when present,
+- downloads missing CSVs with the new yfinance downloader,
+- computes features and labels vs benchmark (`^NSEI` by default),
+- builds rolling windows,
+- generates deterministic candlestick charts for latest sample per stock,
+- runs a fusion-ready ranking workflow through `src.app.api.rank_stocks_endpoint`.
+
+Default universe is 3 stocks + benchmark:
+
+- `RELIANCE.NS`
+- `TCS.NS`
+- `INFY.NS`
+- benchmark: `^NSEI`
+
+Run:
+
+```bash
+python scripts/real_data_smoke_test.py
+```
+
+Optional custom range/output:
+
+```bash
+python scripts/real_data_smoke_test.py \
+  --start 2022-01-01 \
+  --end 2025-01-01 \
+  --output-dir data/interim/real_data_smoke_custom
+```
+
+Artifacts:
+
+- `real_data_ranking.csv` (fusion-ready ranking output)
+- `real_data_smoke_summary.json` (cache/download provenance + sample-level stats)
+- `charts/*.png` (latest candlestick chart per stock)
+
 ## Milestone 3: candlestick chart generation
 
 `src/viz/charts.py` provides deterministic chart utilities for building the image branch input without introducing model logic yet.
