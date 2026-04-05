@@ -1,6 +1,6 @@
 # Nifty-50 Multimodal Transformer
 
-Predict which Nifty-50 stocks will outperform the index over the next 3 trading days by fusing tabular OHLCV features, candlestick chart images, news/analyst text, and a lightweight knowledge graph.
+Predict which Nifty-50 stocks will outperform the index over the next 3 trading days by fusing tabular OHLCV features, candlestick chart images, multi-source company text (news, filings, guidance, investor materials), and a lightweight knowledge graph.
 
 ---
 
@@ -14,7 +14,7 @@ src/data          ← feature engineering, labels, rolling-window dataset
      │
      ├──► src/models/tabular_transformer.py   ← Transformer on numeric features
      ├──► src/models/image_transformer.py ← lightweight patch Transformer on candlestick charts
-     ├──► src/models/text.py      ← pre-trained LM encoder on news/analyst text
+     ├──► src/models/text.py      ← encoder on normalized multi-source company text
      └──► src/models/kg.py        ← graph context tokens from src/kg
                 │
                 ▼
@@ -43,7 +43,7 @@ Each branch (tabular, image, text, KG) can be trained independently and fused la
 | 3 | Candlestick charts | `src/data` → `data/interim/charts/` |
 | 4 | Tabular Transformer baseline | `src/models/tabular_transformer.py`, `src/training/train_tabular.py`, `src/training/evaluate.py` |
 | 5 | Image branch | `src/models/image_transformer.py`, `src/training/train_image.py` |
-| 6 | Text branch | `src/models/text.py` |
+| 6 | Text branch (multi-source company text) | `src/models/text.py`, `src/data/text.py` |
 | 7 | Knowledge augmentation | `src/kg` |
 | 8 | Multimodal fusion Transformer | `src/models/fusion.py` |
 | 9 | Visualisation | `src/viz` |
@@ -256,3 +256,38 @@ What it includes:
 ### Planned connection to multimodal fusion
 
 This milestone intentionally trains only the image branch. The model already exposes a clean embedding interface (`encode_images`) so fusion modules can later consume image embeddings alongside tabular/text/KG embeddings without changing chart preprocessing or training data contracts.
+
+
+## Milestone 6: multi-source company text branch
+
+### Normalized company-text schema (`src/data/text.py`)
+
+The text modality now uses one source-agnostic record schema:
+
+- `stock_id`
+- `event_date`
+- `source_type`
+- `title`
+- `body_text`
+
+Supported source categories include (non-exhaustive):
+
+- news headlines/articles
+- stock exchange filings
+- management guidance updates
+- investor presentation text
+- other company-related text records
+
+### Per-sample text construction
+
+For each `(stock, date)` model sample, `build_company_text_input(...)` applies:
+
+1. filter records with `event_date <= date`
+2. sort by descending recency
+3. concatenate top-k records into one model-ready input string
+
+### Text encoder expectations (`src/models/text.py`)
+
+- The text encoder consumes normalized per-sample strings and is agnostic to the original source type.
+- This keeps preprocessing coursework-scale and modular for later fusion work.
+- PDF-derived text is supported through lightweight direct extraction helpers (no OCR-heavy parsing in this milestone).
