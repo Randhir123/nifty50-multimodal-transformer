@@ -7,7 +7,7 @@ scikit-learn>=1.4
 transformers>=4.41
 
 # Charts
-mplfinance>=0.12
+mplfinance==0.12.10b0
 # Knowledge graph
 networkx>=3.3
 # Visualisation
