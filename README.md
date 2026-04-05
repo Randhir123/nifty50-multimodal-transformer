@@ -15,7 +15,7 @@ src/data          ← feature engineering, labels, rolling-window dataset
      ├──► src/models/tabular_transformer.py   ← Transformer on numeric features
      ├──► src/models/image_transformer.py ← lightweight patch Transformer on candlestick charts
      ├──► src/models/text.py      ← encoder on normalized multi-source company text
-     └──► src/models/kg.py        ← graph context tokens from src/kg
+     └──► src/kg/                 ← graph construction and retrieval context for fusion
                 │
                 ▼
          src/models/fusion.py     ← multimodal fusion Transformer
@@ -114,18 +114,16 @@ GitHub Actions runs on every `push` and `pull_request` and currently verifies:
   - tabular Transformer forward pass
   - image branch forward pass
   - text branch forward pass
+  - KG context retrieval
 
 ### Verified working paths
 
-The current test suite validates these offline paths end-to-end:
-
-- `src/data/features.py` → `src/data/labels.py` → `src/data/dataset.py`
-- `src/kg/build_graph.py` + `src/kg/query_graph.py`
-- `src/viz/charts.py`
-- `src/models/tabular_transformer.py`
-- `src/models/image_transformer.py`
-- `src/models/text.py`
-- one tiny tabular integration pipeline on toy data in `data/toy/`
+- data pipeline (`src/data/features.py` → `src/data/labels.py` → `src/data/dataset.py`)
+- chart generation (`src/viz/charts.py`)
+- tabular model (`src/models/tabular_transformer.py`)
+- image forward path (`src/models/image_transformer.py`)
+- text forward path (`src/models/text.py`)
+- KG retrieval (`src/kg/build_graph.py` + `src/kg/query_graph.py`)
 
 ---
 
@@ -422,7 +420,7 @@ The repository now includes a tiny synthetic dataset under:
 
 ```bash
 # 1) Run component smoke tests
-pytest tests/test_smoke_components.py
+pytest tests/smoke/test_model_and_chart_smoke.py
 
 # 2) Run tabular baseline end-to-end verification on toy data
 python scripts/verify_tabular_baseline.py

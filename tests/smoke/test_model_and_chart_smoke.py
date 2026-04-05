@@ -5,6 +5,8 @@ from pathlib import Path
 import pandas as pd
 import torch
 
+from src.kg.build_graph import build_market_knowledge_graph
+from src.kg.query_graph import retrieve_kg_context
 from src.models.image_transformer import ImageTransformer, ImageTransformerConfig
 from src.models.tabular_transformer import TabularTransformer, TabularTransformerConfig
 from src.models.text import CompanyTextTransformer, CompanyTextTransformerConfig
@@ -63,3 +65,26 @@ def test_text_branch_forward_pass_smoke() -> None:
     logits = model(input_ids, attention_mask)
 
     assert logits.shape == (2,)
+
+
+def test_kg_context_retrieval_smoke(toy_event_records: pd.DataFrame) -> None:
+    returns = pd.DataFrame(
+        {
+            "stock_id": ["TCS", "TCS", "INFY", "INFY"],
+            "date": ["2024-03-01", "2024-03-05", "2024-03-01", "2024-03-05"],
+            "recent_return": [0.01, 0.015, 0.009, 0.011],
+        }
+    )
+    returns["date"] = pd.to_datetime(returns["date"])
+
+    graph = build_market_knowledge_graph(
+        {"TCS": "IT", "INFY": "IT"},
+        event_records=toy_event_records,
+        event_types=["earnings", "guidance"],
+    )
+    context = retrieve_kg_context(graph, stock_id="TCS", as_of_date="2024-03-06", returns=returns)
+
+    assert context["stock_id"] == "TCS"
+    assert context["sector_id"] == "IT"
+    assert context["peer_count"] == 1
+    assert "event_flags" in context
