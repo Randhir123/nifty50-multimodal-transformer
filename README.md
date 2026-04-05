@@ -14,7 +14,7 @@ src/data          ← feature engineering, labels, rolling-window dataset
      │
      ├──► src/models/tabular_transformer.py   ← Transformer on numeric features
      ├──► src/models/image_transformer.py ← lightweight patch Transformer on candlestick charts
-     ├──► src/models/text.py      ← pre-trained LM encoder on news/analyst text
+     ├──► src/models/text_encoder.py      ← pre-trained LM encoder on news/analyst text
      └──► src/models/kg.py        ← graph context tokens from src/kg
                 │
                 ▼
@@ -43,7 +43,7 @@ Each branch (tabular, image, text, KG) can be trained independently and fused la
 | 3 | Candlestick charts | `src/data` → `data/interim/charts/` |
 | 4 | Tabular Transformer baseline | `src/models/tabular_transformer.py`, `src/training/train_tabular.py`, `src/training/evaluate.py` |
 | 5 | Image branch | `src/models/image_transformer.py`, `src/training/train_image.py` |
-| 6 | Text branch | `src/models/text.py` |
+| 6 | Text branch | `src/models/text_encoder.py`, `src/training/train_text.py` |
 | 7 | Knowledge augmentation | `src/kg` |
 | 8 | Multimodal fusion Transformer | `src/models/fusion.py` |
 | 9 | Visualisation | `src/viz` |
@@ -256,3 +256,40 @@ What it includes:
 ### Planned connection to multimodal fusion
 
 This milestone intentionally trains only the image branch. The model already exposes a clean embedding interface (`encode_images`) so fusion modules can later consume image embeddings alongside tabular/text/KG embeddings without changing chart preprocessing or training data contracts.
+
+## Milestone 6: stock-news text branch
+
+### Text branch architecture (`src/models/text_encoder.py`)
+
+- Input is one string per sample, where each string concatenates the top **3-5 most recent headlines**.
+- Hugging Face tokenizer + pretrained encoder backbone (default: `distilbert-base-uncased`).
+- Lightweight pooling (`mean` over valid tokens by default, optional `CLS`) to produce one embedding per sample.
+- Binary classification head returns one logit per sample.
+- `encode_texts(...)` exposes per-sample embeddings (`[batch, hidden_dim]`) for future fusion wiring.
+
+### Expected text sample schema
+
+Text-branch training expects a sample-level table (`.csv` or `.parquet`) with:
+
+- `date`: sample prediction date (used for chronological splitting)
+- `text`: pre-concatenated headline string (top 3-5 recent headlines per sample)
+- `label`: project binary target (`1` if stock outperforms index over next 3 days, else `0`)
+
+### Text training entry point
+
+```bash
+python -m src.training.train_text \
+  --samples data/processed/text_samples.csv \
+  --checkpoint-path data/processed/checkpoints/text_encoder.pt
+```
+
+What it includes:
+- sample-level time-based train/validation split using `date`
+- text-only dataset wrapper for `date`/`text`/`label`
+- train + validation loops with BCE-with-logits
+- metric computation via `src/training/evaluate.py`
+- best-checkpoint saving by validation F1
+
+### Planned connection to multimodal fusion
+
+This milestone intentionally keeps KG and multimodal fusion out-of-scope. The text branch now provides a stable embedding contract via `encode_texts(...)`, so later fusion modules can combine tabular, image, text, and KG embeddings without changing text preprocessing or table schema.
