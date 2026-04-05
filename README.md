@@ -492,3 +492,74 @@ python -m src.training.train_tabular \
 - text branch forward pass
 - KG context retrieval
 - sample text assembly
+
+## Milestone 9: visualization layer
+
+`src/viz` now includes reusable utilities for dashboard/API-ready visual outputs:
+
+- **Ranking tables** from model probabilities (`src/viz/ranking.py`)
+- **Embedding projections** with PCA and t-SNE (`src/viz/embeddings.py`)
+- **Peer graph structures and plots** from KG outputs (`src/viz/peer_graph.py`)
+
+### Supported visual outputs
+
+- Ranking dataframe with columns:
+  - `stock_id`
+  - `date`
+  - `probability`
+  - `predicted_label`
+  - `rank`
+- Embedding projection dataframe with:
+  - metadata columns (for example `sample_id`, `stock_id`)
+  - projected coordinates (`proj_x`, `proj_y`)
+  - method metadata (`method`, variance/perplexity fields)
+- Peer graph payload dictionary:
+  - `nodes`: serializable node records (`id`, `node_type`, `entity_id`)
+  - `edges`: serializable edge records (`source`, `target`, `edge_type`, `event_dates`)
+- Optional static peer-graph image artifact via `plot_peer_graph(...)`
+
+### Example workflow: embedding maps
+
+```python
+import numpy as np
+import pandas as pd
+
+from src.viz.embeddings import project_embeddings
+
+embeddings = np.random.randn(128, 64)
+metadata = pd.DataFrame({
+    "sample_id": range(128),
+    "stock_id": [f"S{i%10}" for i in range(128)],
+})
+
+pca_map = project_embeddings(embeddings, method="pca", metadata=metadata)
+tsne_map = project_embeddings(embeddings, method="tsne", metadata=metadata, random_state=42)
+
+# pca_map / tsne_map can be passed directly to matplotlib, plotly, or API responses
+```
+
+### Example workflow: ranked stock views
+
+```python
+import numpy as np
+import pandas as pd
+
+from src.viz.ranking import build_ranked_predictions
+
+samples = pd.DataFrame(
+    {
+        "stock_id": ["TCS", "INFY", "RELIANCE"],
+        "date": ["2026-01-05", "2026-01-05", "2026-01-05"],
+    }
+)
+probabilities = np.array([0.63, 0.58, 0.41])
+
+ranked = build_ranked_predictions(samples, probabilities, threshold=0.5)
+# ranked is deterministic and reusable for notebooks, dashboards, and APIs.
+```
+
+Design principles used in this milestone:
+- lightweight, typed interfaces
+- deterministic ordering and random seeds
+- no coupling to model training loops
+- serialization-friendly outputs for later app/API integration
