@@ -85,6 +85,50 @@ pip install -e .
 
 ---
 
+## Testing and CI
+
+### Run tests locally
+
+```bash
+# run everything
+pytest
+
+# run only unit + smoke scope (same selection as CI)
+pytest -m "unit or smoke"
+
+# run integration-only checks
+pytest -m integration
+```
+
+### CI coverage today
+
+GitHub Actions runs on every `push` and `pull_request` and currently verifies:
+
+- deterministic **unit tests** for:
+  - feature generation
+  - label generation
+  - rolling-window dataset creation
+  - KG context retrieval
+- lightweight **smoke tests** for:
+  - candlestick chart generation
+  - tabular Transformer forward pass
+  - image branch forward pass
+  - text branch forward pass
+
+### Verified working paths
+
+The current test suite validates these offline paths end-to-end:
+
+- `src/data/features.py` → `src/data/labels.py` → `src/data/dataset.py`
+- `src/kg/build_graph.py` + `src/kg/query_graph.py`
+- `src/viz/charts.py`
+- `src/models/tabular_transformer.py`
+- `src/models/image_transformer.py`
+- `src/models/text.py`
+- one tiny tabular integration pipeline on toy data in `data/toy/`
+
+---
+
 ## Label definition
 
 A stock is labelled **positive** for day *t* if its 3-day forward return exceeds the equal-weighted Nifty-50 index return over the same window. No future data leaks into features computed at day *t*.

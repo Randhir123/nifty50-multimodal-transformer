@@ -15,3 +15,8 @@ include = ["src*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "unit: fast deterministic unit tests",
+    "smoke: lightweight component smoke tests",
+    "integration: tiny end-to-end pipeline checks",
+]
