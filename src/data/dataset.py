@@ -1,4 +1,4 @@
-"""Dataset helpers for rolling-window and image-only model inputs."""
+"""Dataset helpers for rolling-window, image-only, and text-only model inputs."""
 
 from __future__ import annotations
 
@@ -36,6 +36,21 @@ class ImagePathDataset:
     """
 
     image_paths: np.ndarray
+    y: np.ndarray
+    sample_dates: np.ndarray
+
+
+@dataclass(frozen=True)
+class TextSampleDataset:
+    """Container for text-only samples tied to binary labels.
+
+    Attributes:
+        texts: Per-sample news headline strings.
+        y: Label vector of shape ``[num_samples]`` with values in ``{0, 1}``.
+        sample_dates: Date values used for chronological splitting.
+    """
+
+    texts: np.ndarray
     y: np.ndarray
     sample_dates: np.ndarray
 
@@ -176,3 +191,38 @@ def create_image_path_dataset(
         raise ValueError("Image dataset is empty")
 
     return ImagePathDataset(image_paths=image_paths, y=labels, sample_dates=sample_dates)
+
+
+def create_text_sample_dataset(
+    df: pd.DataFrame,
+    *,
+    text_col: str = "text",
+    label_col: str = "label",
+    date_col: str = "date",
+    dropna: bool = True,
+) -> TextSampleDataset:
+    """Create text sample dataset for text-only training.
+
+    Expects one row per prediction sample where ``text`` is a single string
+    composed from the top 3-5 most recent headlines for that sample.
+    """
+    required_cols = [text_col, label_col, date_col]
+    missing = [col for col in required_cols if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    work_df = df.copy()
+    work_df[date_col] = pd.to_datetime(work_df[date_col])
+    if dropna:
+        work_df = work_df.dropna(subset=required_cols)
+
+    work_df = work_df.sort_values(date_col).reset_index(drop=True)
+
+    texts = work_df[text_col].astype(str).to_numpy(dtype=object)
+    labels = work_df[label_col].astype(np.int64).to_numpy()
+    sample_dates = work_df[date_col].to_numpy()
+
+    if len(texts) == 0:
+        raise ValueError("Text dataset is empty")
+
+    return TextSampleDataset(texts=texts, y=labels, sample_dates=sample_dates)

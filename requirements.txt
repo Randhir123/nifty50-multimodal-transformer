@@ -4,6 +4,7 @@ torchvision>=0.17
 numpy>=1.26
 pandas>=2.2
 scikit-learn>=1.4
+transformers>=4.41
 
 # Charts
 mplfinance>=0.12
