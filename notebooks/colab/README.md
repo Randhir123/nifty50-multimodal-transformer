@@ -25,19 +25,23 @@ This is the easiest notebook to use for recording because it avoids passing stat
 
 ## Architecture reference
 
+Use the professional architecture document for model details:
+
 ```text
-model_and_embedding_details.ipynb
+../../docs/architecture.md
 ```
 
 It documents:
 
-- tabular feature/window shape;
-- image Transformer settings;
-- text token dimension;
-- KG token fields and dimension;
-- fusion Transformer hidden size, number of heads, number of layers, and feed-forward dimension;
-- why the model uses a Transformer encoder and no decoder;
-- output head: dropout, linear layer, raw logit, `BCEWithLogitsLoss`, and sigmoid at inference.
+- architectural purpose and scope;
+- alignment and leakage-prevention rules;
+- tabular, image, text, and KG modality contracts;
+- embedding dimensions and compact Colab demo settings;
+- encoder-only Fusion Transformer design;
+- why no Transformer decoder is used;
+- output head: dropout, linear layer, raw logit, `BCEWithLogitsLoss`, and sigmoid at inference;
+- how the model learns from supervised labels rather than self-attention alone;
+- ablation strategy and current limitations.
 
 ## Optional/reference split notebooks
 
