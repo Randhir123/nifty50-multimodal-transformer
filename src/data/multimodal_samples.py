@@ -130,13 +130,7 @@ def build_tabular_multimodal_samples(
     window_size: int = 60,
     dropna: bool = True,
 ) -> MultimodalSampleArrays:
-    """Build aligned multimodal samples from real tabular rolling windows.
-
-    Rolling windows are built independently per stock so a sample can never mix
-    timesteps from different stocks.  Optional image/text/KG arrays are not
-    created by this function; they will be wired in later slices against the
-    same ``stock_ids`` and ``end_dates`` rows.
-    """
+    """Build aligned multimodal samples from real tabular rolling windows."""
     _validate_tabular_inputs(
         df,
         feature_cols=feature_cols,
@@ -354,12 +348,39 @@ def build_text_tokens_for_samples(
     return np.stack(tokens).astype(np.float32)
 
 
-def kg_context_to_token(context: dict[str, Any], *, event_types: list[str] | None = None) -> np.ndarray:
-    """Flatten normalized KG context to a stable numeric token.
+def build_text_tokens_for_sample_arrays(
+    arrays: MultimodalSampleArrays,
+    text_records: pd.DataFrame,
+    *,
+    top_k: int = 5,
+    dim: int = 16,
+) -> np.ndarray:
+    """Build text tokens aligned to ``arrays.stock_ids`` and ``arrays.end_dates``."""
+    samples = pd.DataFrame({"stock_id": arrays.stock_ids, "date": arrays.end_dates})
+    return build_text_tokens_for_samples(samples, text_records, top_k=top_k, dim=dim)
 
-    The token intentionally uses simple scalar features so it can feed the
-    existing fusion Transformer before a graph embedding model is introduced.
-    """
+
+def attach_text_tokens(
+    arrays: MultimodalSampleArrays,
+    text_records: pd.DataFrame,
+    *,
+    top_k: int = 5,
+    dim: int = 16,
+) -> MultimodalSampleArrays:
+    """Return a copy of ``arrays`` with leakage-safe text tokens aligned by row."""
+    text_tokens = build_text_tokens_for_sample_arrays(
+        arrays,
+        text_records,
+        top_k=top_k,
+        dim=dim,
+    )
+    enriched = replace(arrays, text_tokens=text_tokens)
+    enriched.validate()
+    return enriched
+
+
+def kg_context_to_token(context: dict[str, Any], *, event_types: list[str] | None = None) -> np.ndarray:
+    """Flatten normalized KG context to a stable numeric token."""
     flags = context.get("event_flags", {}) or {}
     ordered_event_types = event_types or sorted(str(k) for k in flags)
     values = [
