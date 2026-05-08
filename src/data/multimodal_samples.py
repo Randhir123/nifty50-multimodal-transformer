@@ -17,9 +17,12 @@ import hashlib
 import networkx as nx
 import numpy as np
 import pandas as pd
+import torch
 
 from src.data.text import build_company_text_input, normalize_company_text_records
 from src.kg.query_graph import retrieve_kg_context
+from src.models.image_transformer import ImageTransformer, ImageTransformerConfig
+from src.viz.charts import resolve_chart_path
 
 
 @dataclass(frozen=True)
@@ -224,6 +227,101 @@ def stable_text_token(text: str, *, dim: int = 16) -> np.ndarray:
 def stable_image_token(identifier: str, *, dim: int = 12) -> np.ndarray:
     """Create a deterministic placeholder token for a chart/image identifier."""
     return stable_text_token(f"image::{identifier}", dim=dim)
+
+
+def resolve_image_paths_for_samples(
+    *,
+    stock_ids: Sequence[str],
+    end_dates: Sequence[Any],
+    chart_dir: str | Path,
+) -> list[Path]:
+    """Resolve deterministic chart paths aligned to sample rows."""
+    if len(stock_ids) != len(end_dates):
+        raise ValueError("stock_ids and end_dates must have identical lengths")
+    return [
+        resolve_chart_path(str(stock_id), pd.Timestamp(end_date), output_dir=chart_dir)
+        for stock_id, end_date in zip(stock_ids, end_dates, strict=True)
+    ]
+
+
+def load_chart_image_tensors(
+    image_paths: Sequence[str | Path],
+    *,
+    image_size: int,
+) -> torch.Tensor:
+    """Load chart images into a float tensor of shape [batch, 3, H, W]."""
+    if image_size <= 0:
+        raise ValueError("image_size must be positive")
+    try:
+        from PIL import Image
+    except ImportError as exc:  # pragma: no cover - dependency installed via torchvision/Pillow
+        raise ImportError("Pillow is required to load chart images") from exc
+
+    tensors: list[np.ndarray] = []
+    for raw_path in image_paths:
+        path = Path(raw_path)
+        if not path.exists():
+            raise FileNotFoundError(f"Chart image not found: {path}")
+        image = Image.open(path).convert("RGB").resize((image_size, image_size))
+        array = np.asarray(image, dtype=np.float32) / 255.0
+        tensors.append(np.transpose(array, (2, 0, 1)))
+    if not tensors:
+        raise ValueError("image_paths must not be empty")
+    return torch.from_numpy(np.stack(tensors).astype(np.float32))
+
+
+def build_image_tokens_for_samples(
+    *,
+    stock_ids: Sequence[str],
+    end_dates: Sequence[Any],
+    chart_dir: str | Path,
+    config: ImageTransformerConfig | None = None,
+    batch_size: int = 8,
+    device: str = "cpu",
+) -> np.ndarray:
+    """Encode aligned chart images into image tokens using ``ImageTransformer``."""
+    if batch_size <= 0:
+        raise ValueError("batch_size must be positive")
+    model_config = config or ImageTransformerConfig()
+    paths = resolve_image_paths_for_samples(
+        stock_ids=stock_ids, end_dates=end_dates, chart_dir=chart_dir
+    )
+    images = load_chart_image_tensors(paths, image_size=model_config.image_size)
+    torch_device = torch.device(
+        device if torch.cuda.is_available() or device == "cpu" else "cpu"
+    )
+    model = ImageTransformer(model_config).to(torch_device)
+    model.eval()
+
+    batches: list[np.ndarray] = []
+    with torch.no_grad():
+        for start in range(0, images.size(0), batch_size):
+            batch = images[start : start + batch_size].to(torch_device)
+            embeddings = model.encode_images(batch)
+            batches.append(embeddings.cpu().numpy())
+    return np.concatenate(batches, axis=0).astype(np.float32)
+
+
+def attach_image_tokens(
+    arrays: MultimodalSampleArrays,
+    *,
+    chart_dir: str | Path,
+    config: ImageTransformerConfig | None = None,
+    batch_size: int = 8,
+    device: str = "cpu",
+) -> MultimodalSampleArrays:
+    """Return a copy of ``arrays`` with chart-image tokens aligned by row."""
+    image_tokens = build_image_tokens_for_samples(
+        stock_ids=arrays.stock_ids,
+        end_dates=arrays.end_dates,
+        chart_dir=chart_dir,
+        config=config,
+        batch_size=batch_size,
+        device=device,
+    )
+    enriched = replace(arrays, image_tokens=image_tokens)
+    enriched.validate()
+    return enriched
 
 
 def build_text_tokens_for_samples(
