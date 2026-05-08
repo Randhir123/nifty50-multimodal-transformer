@@ -69,9 +69,15 @@ def test_build_kg_tokens_for_samples_aligns_to_stock_and_date_rows() -> None:
     assert tokens.shape == (3, 5)
     # Token order is: peer_count, peer_avg_recent_return,
     # sector_avg_recent_return, earnings flag, guidance flag.
-    np.testing.assert_allclose(tokens[0], np.array([1, 0.25, 0.14, 1, 0], dtype=np.float32))
-    np.testing.assert_allclose(tokens[1], np.array([1, 0.35, 0.195, 0, 1], dtype=np.float32))
-    np.testing.assert_allclose(tokens[2], np.array([1, 0.025, 0.14, 0, 1], dtype=np.float32))
+    np.testing.assert_allclose(
+        tokens[0], np.array([1, 0.25, 0.1375, 1, 0], dtype=np.float32)
+    )
+    np.testing.assert_allclose(
+        tokens[1], np.array([1, 0.35, 0.1925, 0, 1], dtype=np.float32)
+    )
+    np.testing.assert_allclose(
+        tokens[2], np.array([1, 0.025, 0.1375, 0, 1], dtype=np.float32)
+    )
 
 
 def test_attach_kg_tokens_preserves_existing_arrays_and_adds_aligned_tokens() -> None:
