@@ -1,0 +1,81 @@
+name: Image Multimodal Samples
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  image-multimodal:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -e .
+          pip install pytest
+
+      - name: Run image multimodal tests
+        run: pytest tests/unit/test_image_multimodal_samples.py
+
+      - name: Build image multimodal artifact
+        run: |
+          mkdir -p data/processed /tmp/charts
+          cat > /tmp/tabular_samples.csv <<'CSV'
+          stock_id,date,feature_1,feature_2,label
+          AAA.NS,2024-01-01,0.0,10.0,1
+          AAA.NS,2024-01-02,1.0,11.0,0
+          AAA.NS,2024-01-03,2.0,12.0,1
+          AAA.NS,2024-01-04,3.0,13.0,0
+          BBB.NS,2024-01-01,100.0,110.0,1
+          BBB.NS,2024-01-02,101.0,111.0,0
+          BBB.NS,2024-01-03,102.0,112.0,1
+          BBB.NS,2024-01-04,103.0,113.0,0
+          CSV
+          python - <<'PY'
+          from PIL import Image
+          import pandas as pd
+          from src.viz.charts import resolve_chart_path
+          rows = pd.read_csv('/tmp/tabular_samples.csv')
+          idx = 0
+          for stock_id, frame in rows.groupby('stock_id'):
+              for end_date in frame.sort_values('date')['date'].iloc[2:]:
+                  path = resolve_chart_path(stock_id, pd.Timestamp(end_date), output_dir='/tmp/charts')
+                  path.parent.mkdir(parents=True, exist_ok=True)
+                  Image.new('RGB', (24, 24), color=(40 + idx, 40 + idx, 40 + idx)).save(path)
+                  idx += 1
+          PY
+          python scripts/build_multimodal_samples.py \
+            --tabular-csv /tmp/tabular_samples.csv \
+            --feature-cols feature_1,feature_2 \
+            --image-chart-dir /tmp/charts \
+            --image-size 32 \
+            --image-patch-size 16 \
+            --image-model-dim 16 \
+            --image-num-heads 4 \
+            --image-num-layers 1 \
+            --image-ff-dim 32 \
+            --output data/processed/tabular_image_multimodal_samples.npz \
+            --window-size 3
+
+      - name: Run image fusion smoke test
+        run: |
+          python -m src.training.train_fusion \
+            --dataset data/processed/tabular_image_multimodal_samples.npz \
+            --use-image \
+            --checkpoint-path data/processed/checkpoints/ci_fusion_transformer_image.pt \
+            --epochs 1 \
+            --batch-size 2 \
+            --device cpu \
+            --model-dim 16 \
+            --num-heads 4 \
+            --num-layers 1 \
+            --ff-dim 32
