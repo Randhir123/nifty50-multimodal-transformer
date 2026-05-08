@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import hashlib
 
@@ -93,6 +93,115 @@ def save_multimodal_samples(arrays: MultimodalSampleArrays, path: str | Path) ->
     output_path.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(output_path, **arrays.to_npz_kwargs())
     return output_path
+
+
+def _validate_tabular_inputs(
+    df: pd.DataFrame,
+    *,
+    feature_cols: Sequence[str],
+    stock_col: str,
+    date_col: str,
+    label_col: str,
+    window_size: int,
+) -> None:
+    if window_size <= 0:
+        raise ValueError("window_size must be a positive integer")
+    if not feature_cols:
+        raise ValueError("feature_cols must not be empty")
+
+    required = [stock_col, date_col, label_col, *feature_cols]
+    missing = [col for col in required if col not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+
+def build_tabular_multimodal_samples(
+    df: pd.DataFrame,
+    *,
+    feature_cols: Sequence[str],
+    stock_col: str = "stock_id",
+    date_col: str = "date",
+    label_col: str = "label",
+    window_size: int = 60,
+    dropna: bool = True,
+) -> MultimodalSampleArrays:
+    """Build aligned multimodal samples from real tabular rolling windows.
+
+    Rolling windows are built independently per stock so a sample can never mix
+    timesteps from different stocks.  Optional image/text/KG arrays are not
+    created by this function; they will be wired in later slices against the
+    same ``stock_ids`` and ``end_dates`` rows.
+    """
+    _validate_tabular_inputs(
+        df,
+        feature_cols=feature_cols,
+        stock_col=stock_col,
+        date_col=date_col,
+        label_col=label_col,
+        window_size=window_size,
+    )
+
+    work_df = df.copy()
+    work_df[stock_col] = work_df[stock_col].astype(str).str.strip()
+    work_df[date_col] = pd.to_datetime(work_df[date_col])
+    if dropna:
+        work_df = work_df.dropna(
+            subset=[stock_col, date_col, label_col, *feature_cols]
+        ).reset_index(drop=True)
+
+    work_df = work_df.sort_values([stock_col, date_col]).reset_index(drop=True)
+
+    windows: list[np.ndarray] = []
+    labels: list[int] = []
+    end_dates: list[pd.Timestamp] = []
+    stock_ids: list[str] = []
+
+    for stock_id, stock_df in work_df.groupby(stock_col, sort=True):
+        stock_frame = stock_df.sort_values(date_col).reset_index(drop=True)
+        if len(stock_frame) < window_size:
+            continue
+
+        features = stock_frame.loc[:, list(feature_cols)].to_numpy(dtype=np.float32)
+        stock_labels = stock_frame.loc[:, label_col].to_numpy(dtype=np.int64)
+        stock_dates = stock_frame.loc[:, date_col].to_numpy()
+
+        sample_count = len(stock_frame) - window_size + 1
+        for start_idx in range(sample_count):
+            end_idx = start_idx + window_size - 1
+            windows.append(features[start_idx : end_idx + 1])
+            labels.append(int(stock_labels[end_idx]))
+            end_dates.append(pd.to_datetime(stock_dates[end_idx]))
+            stock_ids.append(str(stock_id))
+
+    if not windows:
+        raise ValueError(
+            "No tabular samples could be built; check window_size and per-stock row counts"
+        )
+
+    arrays = MultimodalSampleArrays(
+        tabular_tokens=np.stack(windows).astype(np.float32),
+        y=np.asarray(labels, dtype=np.int64),
+        end_dates=np.asarray(end_dates, dtype="datetime64[ns]"),
+        stock_ids=np.asarray(stock_ids, dtype=str),
+    )
+    arrays.validate()
+    return arrays
+
+
+def infer_numeric_feature_columns(
+    df: pd.DataFrame,
+    *,
+    stock_col: str = "stock_id",
+    date_col: str = "date",
+    label_col: str = "label",
+) -> list[str]:
+    """Infer numeric tabular feature columns from a dataframe."""
+    excluded = {stock_col, date_col, label_col}
+    return [
+        col
+        for col in df.columns
+        if col not in excluded and pd.api.types.is_numeric_dtype(df[col])
+    ]
 
 
 def stable_text_token(text: str, *, dim: int = 16) -> np.ndarray:

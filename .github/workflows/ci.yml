@@ -25,3 +25,43 @@ jobs:
 
       - name: Run unit and smoke tests
         run: pytest -m "unit or smoke"
+
+      - name: Run multimodal sample builder tests
+        run: |
+          pytest tests/unit/test_multimodal_sample_builder.py
+          pytest tests/unit/test_tabular_multimodal_samples.py
+
+      - name: Build tabular multimodal sample artifact
+        run: |
+          mkdir -p data/processed
+          cat > /tmp/tabular_samples.csv <<'CSV'
+          stock_id,date,feature_1,feature_2,label
+          AAA.NS,2024-01-01,0.0,10.0,1
+          AAA.NS,2024-01-02,1.0,11.0,0
+          AAA.NS,2024-01-03,2.0,12.0,1
+          AAA.NS,2024-01-04,3.0,13.0,0
+          AAA.NS,2024-01-05,4.0,14.0,1
+          BBB.NS,2024-01-01,100.0,110.0,1
+          BBB.NS,2024-01-02,101.0,111.0,0
+          BBB.NS,2024-01-03,102.0,112.0,1
+          BBB.NS,2024-01-04,103.0,113.0,0
+          BBB.NS,2024-01-05,104.0,114.0,1
+          CSV
+          python scripts/build_multimodal_samples.py \
+            --tabular-csv /tmp/tabular_samples.csv \
+            --feature-cols feature_1,feature_2 \
+            --output data/processed/tabular_multimodal_samples.npz \
+            --window-size 3
+
+      - name: Run tabular fusion smoke test
+        run: |
+          python -m src.training.train_fusion \
+            --dataset data/processed/tabular_multimodal_samples.npz \
+            --checkpoint-path data/processed/checkpoints/ci_fusion_transformer.pt \
+            --epochs 1 \
+            --batch-size 2 \
+            --device cpu \
+            --model-dim 16 \
+            --num-heads 4 \
+            --num-layers 1 \
+            --ff-dim 32
