@@ -25,8 +25,6 @@ This is the easiest notebook to use for recording because it avoids passing stat
 
 ## Architecture reference
 
-Use this notebook when you want to explain dimensions and model settings during the recording:
-
 ```text
 model_and_embedding_details.ipynb
 ```
@@ -37,7 +35,9 @@ It documents:
 - image Transformer settings;
 - text token dimension;
 - KG token fields and dimension;
-- fusion Transformer hidden size, number of heads, number of layers, and feed-forward dimension.
+- fusion Transformer hidden size, number of heads, number of layers, and feed-forward dimension;
+- why the model uses a Transformer encoder and no decoder;
+- output head: dropout, linear layer, raw logit, `BCEWithLogitsLoss`, and sigmoid at inference.
 
 ## Optional/reference split notebooks
 
