@@ -8,16 +8,18 @@ schema, and convert leakage-safe text/KG context into numeric tokens.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Sequence
 
 import hashlib
 
+import networkx as nx
 import numpy as np
 import pandas as pd
 
 from src.data.text import build_company_text_input, normalize_company_text_records
+from src.kg.query_graph import retrieve_kg_context
 
 
 @dataclass(frozen=True)
@@ -283,6 +285,58 @@ def build_kg_tokens_from_contexts(contexts: list[dict[str, Any]]) -> np.ndarray:
     return np.stack(
         [kg_context_to_token(context, event_types=event_types) for context in contexts]
     ).astype(np.float32)
+
+
+def build_kg_tokens_for_samples(
+    graph: nx.Graph,
+    *,
+    stock_ids: Sequence[str],
+    end_dates: Sequence[Any],
+    returns: pd.DataFrame | None = None,
+    lookback_periods: int = 5,
+    event_lookback_days: int = 7,
+    index_id: str = "NIFTY50",
+) -> np.ndarray:
+    """Build KG tokens aligned to ``stock_ids`` and ``end_dates`` sample rows."""
+    if len(stock_ids) != len(end_dates):
+        raise ValueError("stock_ids and end_dates must have identical lengths")
+    contexts = [
+        retrieve_kg_context(
+            graph,
+            stock_id=str(stock_id),
+            as_of_date=end_date,
+            returns=returns,
+            lookback_periods=lookback_periods,
+            event_lookback_days=event_lookback_days,
+            index_id=index_id,
+        )
+        for stock_id, end_date in zip(stock_ids, end_dates, strict=True)
+    ]
+    return build_kg_tokens_from_contexts(contexts)
+
+
+def attach_kg_tokens(
+    arrays: MultimodalSampleArrays,
+    graph: nx.Graph,
+    *,
+    returns: pd.DataFrame | None = None,
+    lookback_periods: int = 5,
+    event_lookback_days: int = 7,
+    index_id: str = "NIFTY50",
+) -> MultimodalSampleArrays:
+    """Return a copy of ``arrays`` with KG tokens aligned by row."""
+    kg_tokens = build_kg_tokens_for_samples(
+        graph,
+        stock_ids=arrays.stock_ids,
+        end_dates=arrays.end_dates,
+        returns=returns,
+        lookback_periods=lookback_periods,
+        event_lookback_days=event_lookback_days,
+        index_id=index_id,
+    )
+    enriched = replace(arrays, kg_tokens=kg_tokens)
+    enriched.validate()
+    return enriched
 
 
 def build_toy_multimodal_samples(
