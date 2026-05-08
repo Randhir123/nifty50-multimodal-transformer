@@ -23,6 +23,11 @@ It is not a production trading system, and it does not yet implement a full port
 
 ---
 
+## 2. Transformer Architecture
+The model is encoder-only. We are not generating text or sequences, so we do not need a Transformer decoder. We create supervised training samples where each row contains aligned tabular, image, text, and KG tokens plus a label saying whether the stock outperformed Nifty over the future horizon. Self-attention helps the model mix signals across tokens and modalities, but the learning signal comes from comparing the predicted logit with the actual label using binary cross-entropy loss. During training, `BCEWithLogitsLoss` consumes the raw logit and applies sigmoid internally. During inference, sigmoid converts the logit into the probability of outperformance versus the Nifty.
+
+![Fusion Transformer architecture]()
+
 ## 2. Architectural principles
 
 The design follows four main principles.
@@ -506,7 +511,7 @@ The current architecture has deliberate simplifications:
 
 Use this concise explanation during the recording:
 
-> The model is encoder-only. We are not generating text or sequences, so we do not need a Transformer decoder. We create supervised training samples where each row contains aligned tabular, image, text, and KG tokens plus a label saying whether the stock outperformed Nifty over the future horizon. Self-attention helps the model mix signals across tokens and modalities, but the learning signal comes from comparing the predicted logit with the actual label using binary cross-entropy loss. During training, `BCEWithLogitsLoss` consumes the raw logit and applies sigmoid internally. During inference, sigmoid converts the logit into the probability of outperformance versus the Nifty.
+> 
 
 ---
 
