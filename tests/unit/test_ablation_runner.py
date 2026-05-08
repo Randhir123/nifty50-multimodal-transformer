@@ -1,17 +1,30 @@
 from __future__ import annotations
 
 import csv
+import importlib.util
 import json
 import sys
+from pathlib import Path
 
 import pytest
 
-from scripts.run_ablation_study import (
-    AblationVariant,
-    build_train_command,
-    select_variants,
-    write_results,
-)
+
+def _load_ablation_module():
+    script_path = Path(__file__).resolve().parents[2] / "scripts" / "run_ablation_study.py"
+    spec = importlib.util.spec_from_file_location("run_ablation_study", script_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"Unable to load ablation script from {script_path}")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+ablation = _load_ablation_module()
+AblationVariant = ablation.AblationVariant
+build_train_command = ablation.build_train_command
+select_variants = ablation.select_variants
+write_results = ablation.write_results
 
 
 def test_select_variants_skips_missing_optional_modalities() -> None:
