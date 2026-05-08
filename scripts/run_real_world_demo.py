@@ -245,7 +245,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force-refresh", action="store_true")
     parser.add_argument("--window-size", type=int, default=20)
     parser.add_argument("--horizon-days", type=int, default=3)
-    parser.add_argument("--chart-lookback-days", type=int, default=60)
+    parser.add_argument("--chart-lookback-days", type=int, default=20)
     parser.add_argument("--text-dim", type=int, default=16)
     parser.add_argument("--image-size", type=int, default=64)
     parser.add_argument("--image-patch-size", type=int, default=16)
