@@ -30,6 +30,7 @@ jobs:
         run: |
           pytest tests/unit/test_multimodal_sample_builder.py
           pytest tests/unit/test_tabular_multimodal_samples.py
+          pytest tests/unit/test_kg_multimodal_samples.py
 
       - name: Build tabular multimodal sample artifact
         run: |
@@ -58,6 +59,55 @@ jobs:
           python -m src.training.train_fusion \
             --dataset data/processed/tabular_multimodal_samples.npz \
             --checkpoint-path data/processed/checkpoints/ci_fusion_transformer.pt \
+            --epochs 1 \
+            --batch-size 2 \
+            --device cpu \
+            --model-dim 16 \
+            --num-heads 4 \
+            --num-layers 1 \
+            --ff-dim 32
+
+      - name: Build tabular KG multimodal sample artifact
+        run: |
+          cat > /tmp/stock_sectors.csv <<'CSV'
+          stock_id,sector_id
+          AAA.NS,IT
+          BBB.NS,IT
+          CSV
+          cat > /tmp/kg_returns.csv <<'CSV'
+          stock_id,date,recent_return
+          AAA.NS,2024-01-01,0.01
+          AAA.NS,2024-01-02,0.02
+          AAA.NS,2024-01-03,0.03
+          AAA.NS,2024-01-04,0.04
+          AAA.NS,2024-01-05,0.05
+          BBB.NS,2024-01-01,0.10
+          BBB.NS,2024-01-02,0.20
+          BBB.NS,2024-01-03,0.30
+          BBB.NS,2024-01-04,0.40
+          BBB.NS,2024-01-05,0.50
+          CSV
+          cat > /tmp/kg_events.csv <<'CSV'
+          stock_id,event_date,event_type
+          AAA.NS,2024-01-03,earnings
+          AAA.NS,2024-01-04,guidance
+          BBB.NS,2024-01-03,guidance
+          CSV
+          python scripts/build_multimodal_samples.py \
+            --tabular-csv /tmp/tabular_samples.csv \
+            --feature-cols feature_1,feature_2 \
+            --kg-stock-sector-csv /tmp/stock_sectors.csv \
+            --kg-returns-csv /tmp/kg_returns.csv \
+            --kg-events-csv /tmp/kg_events.csv \
+            --output data/processed/tabular_kg_multimodal_samples.npz \
+            --window-size 3
+
+      - name: Run tabular KG fusion smoke test
+        run: |
+          python -m src.training.train_fusion \
+            --dataset data/processed/tabular_kg_multimodal_samples.npz \
+            --use-kg \
+            --checkpoint-path data/processed/checkpoints/ci_fusion_transformer_kg.pt \
             --epochs 1 \
             --batch-size 2 \
             --device cpu \
