@@ -4,6 +4,9 @@ This folder breaks the real-world demo into one notebook per step. Use this flow
 
 ## Notebook order
 
+0. `project_introduction.ipynb`  
+   Conceptual introduction notebook. Explains the project goals, the multimodal workflow, and how different modalities are transformed into embeddings. It uses conceptual workflow/architecture diagrams only — no numeric result or backtest visuals.
+
 1. `00_setup_and_data_download.ipynb`  
    Clones/installs the repo in Colab and downloads real OHLCV/index data from yfinance.
 
@@ -38,14 +41,15 @@ Edit the `TICKERS` cell in notebook 00 to use a larger universe.
 The notebooks make the demo easier to explain:
 
 ```text
-raw data
+conceptual framing
+  -> raw data
   -> features and labels
   -> aligned multimodal tensors
   -> fusion ablations
   -> actual-data visuals
 ```
 
-This also makes it clear which visuals come from real run artifacts and which conceptual slides are only explanation aids.
+This also makes it clear which visuals come from real run artifacts and which conceptual diagrams are only explanation aids.
 
 ## Important limitation
 
