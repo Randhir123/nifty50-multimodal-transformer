@@ -1,8 +1,31 @@
 # Colab Demo Notebooks
 
-This folder breaks the real-world demo into one notebook per step. Use this flow for recording and teaching instead of running one giant script.
+This folder contains Colab notebooks for recording and teaching the real-world multimodal pipeline.
 
-## Notebook order
+## Recommended recording path
+
+Use this notebook for the main demo:
+
+```text
+all_in_one_real_world_demo.ipynb
+```
+
+It runs the full flow in one Colab runtime:
+
+```text
+conceptual framing
+  -> setup and yfinance download
+  -> features and labels
+  -> aligned multimodal tensors
+  -> fusion ablations
+  -> actual-data visuals
+```
+
+This is the easiest notebook to use for recording because it avoids passing state across multiple notebooks.
+
+## Optional/reference split notebooks
+
+The split notebooks are still useful for teaching individual stages:
 
 0. `project_introduction.ipynb`  
    Conceptual introduction notebook. Explains the project goals, the multimodal workflow, and how different modalities are transformed into embeddings. It uses conceptual workflow/architecture diagrams only — no numeric result or backtest visuals.
@@ -34,22 +57,19 @@ Benchmark:
 - ^NSEI
 ```
 
-Edit the `TICKERS` cell in notebook 00 to use a larger universe.
+Edit the `TICKERS` cell in the all-in-one notebook to use a larger universe.
 
-## Why notebooks?
+## Why the all-in-one notebook?
 
-The notebooks make the demo easier to explain:
+The all-in-one notebook makes the demo easier to run live:
 
 ```text
-conceptual framing
-  -> raw data
-  -> features and labels
-  -> aligned multimodal tensors
-  -> fusion ablations
-  -> actual-data visuals
+one runtime
+one stateful flow
+one set of generated artifacts
 ```
 
-This also makes it clear which visuals come from real run artifacts and which conceptual diagrams are only explanation aids.
+The split notebooks are helpful for explanation, but the consolidated notebook is better for recording.
 
 ## Important limitation
 
