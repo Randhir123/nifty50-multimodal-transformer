@@ -10,6 +10,7 @@ import pandas as pd
 from src.data.multimodal_samples import (
     attach_image_tokens,
     attach_kg_tokens,
+    attach_text_tokens,
     build_tabular_multimodal_samples,
     build_toy_multimodal_samples,
     infer_numeric_feature_columns,
@@ -50,6 +51,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tabular-dim", type=int, default=4)
     parser.add_argument("--image-dim", type=int, default=12)
     parser.add_argument("--text-dim", type=int, default=16)
+    parser.add_argument("--text-records-csv", type=str, default=None)
+    parser.add_argument("--text-top-k", type=int, default=5)
     parser.add_argument("--kg-stock-sector-csv", type=str, default=None)
     parser.add_argument("--kg-sector-col", type=str, default="sector_id")
     parser.add_argument("--kg-returns-csv", type=str, default=None)
@@ -84,6 +87,13 @@ def main() -> None:
             label_col=args.label_col,
             window_size=args.window_size,
         )
+        if args.text_records_csv:
+            arrays = attach_text_tokens(
+                arrays,
+                pd.read_csv(args.text_records_csv),
+                top_k=args.text_top_k,
+                dim=args.text_dim,
+            )
         if args.kg_stock_sector_csv:
             graph = build_market_knowledge_graph(
                 _load_stock_sector_mapping(args.kg_stock_sector_csv, stock_col=args.stock_col, sector_col=args.kg_sector_col),
@@ -119,6 +129,7 @@ def main() -> None:
             "Shapes: "
             f"tabular={arrays.tabular_tokens.shape}, "
             f"image={arrays.image_tokens.shape if arrays.image_tokens is not None else None}, "
+            f"text={arrays.text_tokens.shape if arrays.text_tokens is not None else None}, "
             f"kg={arrays.kg_tokens.shape if arrays.kg_tokens is not None else None}, "
             f"y={arrays.y.shape}"
         )
