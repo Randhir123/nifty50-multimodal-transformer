@@ -23,6 +23,22 @@ conceptual framing
 
 This is the easiest notebook to use for recording because it avoids passing state across multiple notebooks.
 
+## Architecture reference
+
+Use this notebook when you want to explain dimensions and model settings during the recording:
+
+```text
+model_and_embedding_details.ipynb
+```
+
+It documents:
+
+- tabular feature/window shape;
+- image Transformer settings;
+- text token dimension;
+- KG token fields and dimension;
+- fusion Transformer hidden size, number of heads, number of layers, and feed-forward dimension.
+
 ## Optional/reference split notebooks
 
 The split notebooks are still useful for teaching individual stages:
