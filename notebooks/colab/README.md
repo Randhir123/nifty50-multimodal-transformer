@@ -25,8 +25,6 @@ This is the easiest notebook to use for recording because it avoids passing stat
 
 ## Architecture reference
 
-Use this notebook when you want to explain embedding dimensions, Transformer settings, the encoder-only design, and the output layer:
-
 ```text
 model_and_embedding_details.ipynb
 ```
