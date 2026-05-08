@@ -107,11 +107,32 @@ python scripts/run_real_world_demo.py \
 Default universe:
 
 ```text
-RELIANCE.NS
-TCS.NS
-INFY.NS
-benchmark: ^NSEI
+Stocks:
+- RELIANCE.NS
+- TCS.NS
+- INFY.NS
+
+Benchmark:
+- ^NSEI
 ```
+
+To keep the demo transparent, the stock universe is not hidden in code. You can override it directly from the command line:
+
+```bash
+python scripts/run_real_world_demo.py \
+  --tickers RELIANCE.NS TCS.NS INFY.NS HDFCBANK.NS ICICIBANK.NS SBIN.NS \
+  --benchmark ^NSEI \
+  --output-dir data/processed/real_world_demo \
+  --period 9mo \
+  --window-size 20 \
+  --horizon-days 3 \
+  --run-ablations \
+  --epochs 1 \
+  --batch-size 4 \
+  --device cpu
+```
+
+For a first run or screen recording, start with the default 3-stock universe. Once the path works, rerun with 6-10 stocks for richer charts and ablation visuals.
 
 The run writes:
 
