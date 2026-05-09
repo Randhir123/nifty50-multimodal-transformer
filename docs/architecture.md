@@ -507,14 +507,6 @@ The current architecture has deliberate simplifications:
 
 ---
 
-## 14. Recommended demo narration
-
-Use this concise explanation during the recording:
-
-> 
-
----
-
 ## 15. Architecture summary
 
 ```text
