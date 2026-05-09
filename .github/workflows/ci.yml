@@ -26,6 +26,9 @@ jobs:
       - name: Run unit and smoke tests
         run: pytest -m "unit or smoke"
 
+      - name: Leakage gate
+        run: pytest tests/integration/test_no_leakage.py -v
+
       - name: Run multimodal sample builder tests
         run: |
           pytest tests/unit/test_multimodal_sample_builder.py

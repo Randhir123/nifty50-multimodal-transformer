@@ -291,6 +291,14 @@ python scripts/visualize_real_world_demo.py \
 
 ---
 
+## Leakage guarantees
+
+Every multimodal sample is keyed by `(stock_id, end_date)`. The pipeline enforces that for prediction date `D` with horizon `H`: tabular windows contain only rows with `date <= D`; text records are filtered to `event_date <= D`; candlestick chart filenames encode `D` (format `{SYMBOL}_{YYYYMMDD}.png`) and are generated from OHLCV data sliced to `date <= D`; KG context carries an `as_of_date` field equal to `D`; and the label is computed from prices at `D+1` through `D+H`, with NaN-labelled rows dropped so a sample is never emitted without valid future data.
+
+These invariants are mechanically verified in [`tests/integration/test_no_leakage.py`](tests/integration/test_no_leakage.py) using deterministic synthetic data. The test covers six positive assertions and two negative tests (future text injection is dropped; truncated future raises rather than silently falling back). It runs on every push and pull request as a required CI gate. The test does not cover subtler issues such as train/test contamination across time folds — that requires purged walk-forward cross-validation, which is a separate concern.
+
+---
+
 ## Current limitations
 
 - The real-world demo uses yfinance snapshots, so runs can differ over time unless you keep the generated `raw/` CSVs.
