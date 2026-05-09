@@ -18,6 +18,7 @@ conceptual framing
   -> features and labels
   -> aligned multimodal tensors
   -> fusion ablations
+  -> portfolio backtest simulation
   -> actual-data visuals
 ```
 

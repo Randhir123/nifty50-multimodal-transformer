@@ -257,7 +257,7 @@ Recommended visuals to add or generate next:
    For each sample, compare scores from tabular-only, +KG, +image, +text, and all-modality variants once prediction export is added.
 
 5. **Backtest curve**  
-   This is not implemented yet. The next value feature is to convert ranked predictions into a simple top-k portfolio simulation versus Nifty and plot cumulative return, drawdown, and turnover.
+   Show `backtest_curve.png` to demonstrate how the model's top-ranked probability predictions would have accumulated benchmark-relative returns in a daily-rebalanced portfolio.
 
 ---
 
@@ -323,7 +323,7 @@ Say:
 
 Say:
 
-> We have classification/ablation evidence now. The next step is a portfolio-style backtest that turns ranked predictions into a top-k strategy and compares it against Nifty.
+> We have classification/ablation evidence now. The final step is a portfolio-style backtest that turns these ranked predictions into a top-k strategy and plots its cumulative returns against Nifty.
 
 ---
 
@@ -345,12 +345,23 @@ If the final ablation file does not exist, rerun with `--run-ablations`.
 
 ---
 
-## What to build next for a stronger demo
+## Step 8: Run the portfolio backtester
 
-The highest-value next feature is:
+The final evaluation step is to convert the model's predictions into a trading strategy to see how it performs against the Nifty50 benchmark.
 
-1. `scripts/run_backtest.py`  
-   Convert ranked predictions into a simple top-k portfolio backtest versus `^NSEI`.
+```bash
+python scripts/run_backtest.py \
+  --predictions data/processed/real_world_demo/ablations/prediction_scores_tabular_image_text_kg.csv \
+  --tabular-samples data/processed/real_world_demo/tabular_samples.csv \
+  --output-dir data/processed/real_world_demo/backtest \
+  --top-k 1
+```
+
+Inspect the outputs:
+```text
+data/processed/real_world_demo/backtest/backtest_metrics.json
+data/processed/real_world_demo/backtest/backtest_curve.png
+```
 
 The visualization script is now implemented:
 

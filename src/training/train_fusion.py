@@ -25,6 +25,7 @@ class FusionArrays:
     image_tokens: np.ndarray | None = None
     text_tokens: np.ndarray | None = None
     kg_tokens: np.ndarray | None = None
+    stock_ids: np.ndarray | None = None
 
 
 class FusionDataset(Dataset[tuple[dict[str, Tensor], Tensor]]):
@@ -95,6 +96,7 @@ def load_fusion_arrays(
         image_tokens=_optional("image_tokens", use_image),
         text_tokens=_optional("text_tokens", use_text),
         kg_tokens=_optional("kg_tokens", use_kg),
+        stock_ids=np.asarray(data["stock_ids"]) if "stock_ids" in data else None,
     )
 
 
@@ -128,6 +130,7 @@ def time_based_split(
         image_tokens=_take(arrays.image_tokens, train_idx),
         text_tokens=_take(arrays.text_tokens, train_idx),
         kg_tokens=_take(arrays.kg_tokens, train_idx),
+        stock_ids=_take(arrays.stock_ids, train_idx),
     )
     val_arrays = FusionArrays(
         tabular_tokens=arrays.tabular_tokens[val_idx],
@@ -136,6 +139,7 @@ def time_based_split(
         image_tokens=_take(arrays.image_tokens, val_idx),
         text_tokens=_take(arrays.text_tokens, val_idx),
         kg_tokens=_take(arrays.kg_tokens, val_idx),
+        stock_ids=_take(arrays.stock_ids, val_idx),
     )
     return train_arrays, val_arrays
 
@@ -186,21 +190,41 @@ def run_epoch(
     return mean_loss, y_true.astype(np.int64), y_prob.astype(np.float32)
 
 
-def train_fusion_transformer(args: argparse.Namespace) -> None:
-    """Main training routine for multimodal fusion."""
-    arrays = load_fusion_arrays(
-        args.dataset,
-        use_image=args.use_image,
-        use_text=args.use_text,
-        use_kg=args.use_kg,
-    )
-    train_arrays, val_arrays = time_based_split(arrays, val_fraction=args.val_fraction)
+def slice_fusion_arrays(arrays: FusionArrays, idx: np.ndarray) -> FusionArrays:
+    """Return a new :class:`FusionArrays` containing only the rows at *idx*."""
 
+    def _take(a: np.ndarray | None) -> np.ndarray | None:
+        return None if a is None else a[idx]
+
+    return FusionArrays(
+        tabular_tokens=arrays.tabular_tokens[idx],
+        y=arrays.y[idx],
+        end_dates=arrays.end_dates[idx],
+        image_tokens=_take(arrays.image_tokens),
+        text_tokens=_take(arrays.text_tokens),
+        kg_tokens=_take(arrays.kg_tokens),
+        stock_ids=_take(arrays.stock_ids),
+    )
+
+
+def train_on_arrays(
+    train_arrays: FusionArrays,
+    val_arrays: FusionArrays,
+    *,
+    args: argparse.Namespace,
+    checkpoint_path: Path,
+) -> dict[str, float]:
+    """Train on pre-split arrays and return the best-epoch validation metrics.
+
+    This is the core training loop, extracted so that both the single-split CLI
+    path and the walk-forward CV path can reuse it without going through
+    subprocess.
+    """
     train_dataset = FusionDataset(train_arrays)
     val_dataset = FusionDataset(val_arrays)
 
     train_loader = DataLoader(
-        train_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0
+        train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=0
     )
     val_loader = DataLoader(
         val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=0
@@ -237,13 +261,21 @@ def train_fusion_transformer(args: argparse.Namespace) -> None:
     )
     model = FusionTransformer(config).to(device)
 
-    criterion = torch.nn.BCEWithLogitsLoss()
+    # Calculate positive weight to prevent model collapse on imbalanced real-world splits
+    num_pos = int(train_arrays.y.sum())
+    num_neg = len(train_arrays.y) - num_pos
+    pos_weight_val = num_neg / max(num_pos, 1)
+    pos_weight = torch.tensor([pos_weight_val], dtype=torch.float32, device=device)
+    
+    criterion = torch.nn.BCEWithLogitsLoss(pos_weight=pos_weight)
     optimizer = torch.optim.AdamW(
         model.parameters(), lr=args.learning_rate, weight_decay=args.weight_decay
     )
 
-    best_val_f1 = -float("inf")
-    checkpoint_path = Path(args.checkpoint_path)
+    best_val_loss = float("inf")
+    best_val_metrics: dict[str, float] = {}
+    best_val_y: np.ndarray = np.empty(0, dtype=np.int64)
+    best_val_prob: np.ndarray = np.empty(0, dtype=np.float32)
     checkpoint_path.parent.mkdir(parents=True, exist_ok=True)
 
     for epoch in range(1, args.epochs + 1):
@@ -268,11 +300,15 @@ def train_fusion_transformer(args: argparse.Namespace) -> None:
         print(
             f"Epoch {epoch:03d} | "
             f"train_loss={train_loss:.4f} val_loss={val_loss:.4f} | "
-            f"train_f1={train_metrics['f1']:.4f} val_f1={val_metrics['f1']:.4f}"
+            f"train_f1={train_metrics.get('f1', 0.0):.4f} val_f1={val_metrics.get('f1', 0.0):.4f}"
         )
 
-        if val_metrics["f1"] > best_val_f1:
-            best_val_f1 = val_metrics["f1"]
+        # Use val_loss for reliable checkpointing, especially when val sets lack positive classes
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            best_val_metrics = val_metrics
+            best_val_y = val_y
+            best_val_prob = val_prob
             torch.save(
                 {
                     "model_state_dict": model.state_dict(),
@@ -283,11 +319,31 @@ def train_fusion_transformer(args: argparse.Namespace) -> None:
                     "val_y_true": val_y.astype(np.int64),
                     "val_y_prob": val_prob.astype(np.float32),
                     "val_end_dates": val_arrays.end_dates,
+                    "val_stock_ids": val_arrays.stock_ids,
                 },
                 checkpoint_path,
             )
 
     print(f"Saved best checkpoint to: {checkpoint_path}")
+    _ = best_val_y, best_val_prob  # available if callers need them later
+    return best_val_metrics
+
+
+def train_fusion_transformer(args: argparse.Namespace) -> None:
+    """Main training routine for multimodal fusion."""
+    arrays = load_fusion_arrays(
+        args.dataset,
+        use_image=args.use_image,
+        use_text=args.use_text,
+        use_kg=args.use_kg,
+    )
+    train_arrays, val_arrays = time_based_split(arrays, val_fraction=args.val_fraction)
+    train_on_arrays(
+        train_arrays,
+        val_arrays,
+        args=args,
+        checkpoint_path=Path(args.checkpoint_path),
+    )
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -314,7 +370,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-layers", type=int, default=2)
     parser.add_argument("--ff-dim", type=int, default=256)
     parser.add_argument("--dropout", type=float, default=0.1)
-    parser.add_argument("--pooling", type=str, default="cls", choices=["cls", "mean"])
+    parser.add_argument("--pooling", type=str, default="mean", choices=["cls", "mean"])
     parser.add_argument("--max-tokens", type=int, default=4096)
 
     parser.add_argument(

@@ -118,3 +118,22 @@ jobs:
             --num-heads 4 \
             --num-layers 1 \
             --ff-dim 32
+
+      - name: CV split unit tests
+        run: pytest tests/unit/test_cv_split.py -v
+
+      - name: CV ablation smoke test (walk-forward, 2 folds)
+        run: |
+          python scripts/run_ablation_study.py \
+            --dataset data/processed/tabular_multimodal_samples.npz \
+            --output-dir data/processed/ablations_cv_smoke \
+            --cv-splits 2 \
+            --horizon-days 3 \
+            --embargo-days 0 \
+            --epochs 1 \
+            --batch-size 2 \
+            --device cpu \
+            --model-dim 16 \
+            --num-heads 4 \
+            --num-layers 1 \
+            --ff-dim 32

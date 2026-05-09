@@ -23,7 +23,7 @@ class FusionTransformerConfig:
     num_layers: int = 2
     ff_dim: int = 256
     dropout: float = 0.1
-    pooling: str = "cls"
+    pooling: str = "mean"
     max_tokens: int = 4096
 
 

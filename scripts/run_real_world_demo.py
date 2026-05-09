@@ -9,6 +9,7 @@ training and ablations.
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import json
 import subprocess
 import sys
@@ -17,6 +18,8 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+import torch
+import yfinance as yf
 
 from src.data.download_yfinance import (
     deterministic_csv_path_for_ticker,
@@ -29,12 +32,13 @@ from src.data.labels import generate_outperformance_label
 from src.data.multimodal_samples import (
     attach_image_tokens,
     attach_kg_tokens,
-    attach_text_tokens,
     build_tabular_multimodal_samples,
     save_multimodal_samples,
 )
+from src.data.text import normalize_company_text_records
 from src.kg.build_graph import build_market_knowledge_graph
 from src.models.image_transformer import ImageTransformerConfig
+from src.models.text_encoder import TextEncoder, TextEncoderConfig
 from src.viz.charts import generate_or_resolve_sample_chart
 
 DEFAULT_TICKERS = ["RELIANCE.NS", "TCS.NS", "INFY.NS"]
@@ -128,6 +132,8 @@ def _build_tabular_rows(
 
 def _build_text_records(tabular_df: pd.DataFrame, *, text_every_n_days: int = 5) -> pd.DataFrame:
     records = []
+    
+    # 1. Fallback Baseline: Deterministic market summaries (ensures historical coverage)
     for ticker, frame in tabular_df.groupby("stock_id"):
         frame = frame.sort_values("date").reset_index(drop=True)
         for idx in range(0, len(frame), text_every_n_days):
@@ -141,12 +147,38 @@ def _build_text_records(tabular_df: pd.DataFrame, *, text_every_n_days: int = 5)
                     "title": f"{ticker} {direction} daily market summary",
                     "body_text": (
                         f"As of {pd.Timestamp(row['date']).date()}, {ticker} had a "
-                        f"{direction} one-day return of {row['log_return_1d']:.4f}, "
-                        f"relative return versus index of {row['stock_minus_index_return']:.4f}, "
-                        f"and volume ratio {row['volume_over_20d_avg']:.4f}."
+                        f"{direction} one-day return of {row['log_return_1d']:.4f}."
                     ),
                 }
             )
+
+    # 2. Add yfinance live news on top
+    tickers = tabular_df["stock_id"].unique()
+    print("Fetching real news from yfinance...")
+    for ticker in tickers:
+        try:
+            stock = yf.Ticker(ticker)
+            news = stock.news
+        except Exception as e:
+            print(f"Warning: Failed to fetch news for {ticker}: {e}")
+            news = []
+        
+        for item in news:
+            publish_time = item.get("providerPublishTime")
+            if publish_time is None:
+                continue
+            
+            event_date = pd.to_datetime(publish_time, unit="s", utc=True).tz_convert("Asia/Kolkata").tz_localize(None)
+            title = item.get("title", "")
+            
+            records.append({
+                "stock_id": ticker,
+                "event_date": event_date,
+                "source_type": "yfinance_news",
+                "title": title,
+                "body_text": title,
+            })
+
     return pd.DataFrame(records)
 
 
@@ -191,6 +223,53 @@ def _generate_charts_for_samples(
     return count
 
 
+def _attach_finbert_text_tokens(
+    arrays, 
+    text_records: pd.DataFrame, 
+    device: str,
+):
+    print("Encoding text records using FinBERT...")
+    config = TextEncoderConfig(
+        pretrained_model_name="ProsusAI/finbert",
+        max_length=192,
+        use_mean_pooling=True,
+    )
+    hidden_size = 768
+    
+    if text_records.empty:
+        text_tokens = np.zeros((len(arrays.stock_ids), hidden_size), dtype=np.float32)
+        return dataclasses.replace(arrays, text_tokens=text_tokens)
+
+    encoder = TextEncoder(config).to(device)
+    encoder.eval()
+    hidden_size = encoder.backbone.config.hidden_size
+    text_tokens = np.zeros((len(arrays.stock_ids), hidden_size), dtype=np.float32)
+
+    normalized = normalize_company_text_records(text_records)
+    
+    with torch.no_grad():
+        for i in range(len(arrays.stock_ids)):
+            stock_id = str(arrays.stock_ids[i])
+            end_date = pd.Timestamp(arrays.end_dates[i]).normalize()
+            
+            visible = normalized.loc[
+                (normalized["stock_id"] == stock_id)
+                & (normalized["event_date"].dt.normalize() <= end_date)
+            ]
+            
+            if visible.empty:
+                continue
+                
+            visible = visible.sort_values("event_date", ascending=False)
+            combined_text = " ".join(visible["title"].head(5).tolist())
+            if not combined_text.strip():
+                continue
+                
+            emb = encoder.encode_texts([combined_text])
+            text_tokens[i] = emb[0].cpu().numpy()
+
+    return dataclasses.replace(arrays, text_tokens=text_tokens)
+
 def _write_summary(path: Path, summary: dict[str, object]) -> None:
     lines = ["# Real-World Multimodal Demo Summary", ""]
     for key, value in summary.items():
@@ -231,6 +310,14 @@ def _run_ablations(args: argparse.Namespace, dataset_path: Path, output_dir: Pat
         "--val-fraction",
         str(args.val_fraction),
     ]
+    if not getattr(args, "single_split", False) and getattr(args, "cv_splits", 1) > 1:
+        command += [
+            "--cv-splits", str(args.cv_splits),
+            "--horizon-days", str(args.horizon_days),
+            "--embargo-days", str(args.embargo_days),
+        ]
+    elif getattr(args, "single_split", False):
+        command.append("--single-split")
     subprocess.run(command, check=True)
 
 
@@ -246,7 +333,7 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--window-size", type=int, default=20)
     parser.add_argument("--horizon-days", type=int, default=3)
     parser.add_argument("--chart-lookback-days", type=int, default=20)
-    parser.add_argument("--text-dim", type=int, default=16)
+    parser.add_argument("--text-dim", type=int, default=768)
     parser.add_argument("--image-size", type=int, default=64)
     parser.add_argument("--image-patch-size", type=int, default=16)
     parser.add_argument("--image-model-dim", type=int, default=16)
@@ -262,6 +349,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--num-layers", type=int, default=1)
     parser.add_argument("--ff-dim", type=int, default=32)
     parser.add_argument("--val-fraction", type=float, default=0.25)
+    parser.add_argument("--cv-splits", type=int, default=1,
+                        help="Walk-forward CV folds (>1 activates CV mode).")
+    parser.add_argument("--embargo-days", type=int, default=0,
+                        help="Calendar-day embargo before each CV test fold.")
+    parser.add_argument("--single-split", action="store_true",
+                        help="Force single-split mode; overrides --cv-splits.")
     return parser
 
 
@@ -321,7 +414,7 @@ def main() -> None:
         chart_lookback_days=args.chart_lookback_days,
     )
     graph = build_market_knowledge_graph(sectors, event_records=event_records)
-    arrays = attach_text_tokens(arrays, text_records, dim=args.text_dim)
+    arrays = _attach_finbert_text_tokens(arrays, text_records, device=args.device)
     arrays = attach_kg_tokens(arrays, graph, returns=kg_returns)
     arrays = attach_image_tokens(
         arrays,

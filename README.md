@@ -6,7 +6,7 @@ The goal is to predict whether a stock will outperform the Nifty50 benchmark ove
 
 - **Tabular market data**: OHLCV-derived technical features and relative strength versus Nifty.
 - **Chart images**: generated candlestick chart PNGs for the same sample window.
-- **Text records**: leakage-safe market-summary/company text available on or before the sample date.
+- **Text records**: real external news fetched via `yfinance` and encoded using FinBERT, combined with leakage-safe market summaries.
 - **Knowledge graph context**: sector, peer, event, and recent-return context.
 
 The central object is an aligned multimodal artifact:
@@ -37,13 +37,14 @@ What's implemented:
 - text token wiring with `event_date <= end_date` cutoffs;
 - fusion training across modality combinations;
 - ablation runner that compares tabular-only versus multimodal variants;
+- simple top-k portfolio historical backtesting (`scripts/run_backtest.py`);
 - manual real-world demo using yfinance OHLCV snapshots;
 - CI gates for tabular, KG, image, text, and ablation smoke paths.
 
 Not yet claimed:
 
 - real investment performance;
-- production-grade news/filing ingestion;
+- heavy external document/PDF parsing;
 - a statistically meaningful backtest;
 - a trained model suitable for financial decisions.
 
@@ -147,6 +148,7 @@ data/processed/real_world_demo/
 ├── event_records.csv                   # high-volume event flags
 ├── real_world_multimodal_samples.npz   # aligned multimodal artifact
 ├── DEMO_SUMMARY.md                     # run summary
+├── backtest/                           # portfolio backtest metrics and plots
 └── ablations/                          # optional, when --run-ablations is set
     ├── ablation_results.csv
     └── ablation_results.json
@@ -192,7 +194,7 @@ Recommended demo sequence:
    ```
 
 6. **Be honest about backtesting**  
-   The current repo has classification metrics and ablation results. A portfolio-style historical backtest curve is the next evidence layer, not something already proven unless you add/run that script.
+   Show the simple top-k portfolio backtest curve, but explain that it is a conceptual simulation without slippage or transaction costs.
 
 ---
 
@@ -291,6 +293,47 @@ python scripts/visualize_real_world_demo.py \
 
 ---
 
+## Cross-validation
+
+The ablation runner supports purged walk-forward cross-validation to produce more reliable mean ± std estimates across multiple time folds.
+
+```bash
+python scripts/run_ablation_study.py \
+  --dataset data/processed/multimodal_samples.npz \
+  --output-dir data/processed/ablations \
+  --cv-splits 3 \
+  --horizon-days 3 \
+  --embargo-days 5 \
+  --epochs 1 \
+  --batch-size 2 \
+  --device cpu \
+  --model-dim 16 \
+  --num-heads 4 \
+  --num-layers 1 \
+  --ff-dim 32
+```
+
+`--cv-splits N` (N > 1) divides the dataset chronologically into N+1 equal chunks and runs N expanding-window folds. Two groups are excluded from each fold's training set:
+
+- **Purged** samples whose label window (`end_date + horizon_days` calendar days) reaches into the validation period.
+- **Embargoed** samples within `embargo_days` calendar days before the validation start.
+
+The effective exclusion cutoff is `fold_start − max(horizon_days, embargo_days)`.
+
+Outputs:
+
+```text
+ablations/
+├── ablation_results.csv          # one row per variant, mean metrics across folds
+├── ablation_results_folds.csv    # one row per variant × fold
+├── ablation_results.json
+└── ablation_diagnostics.md
+```
+
+Use `--single-split` (or the default `--cv-splits 1`) to keep the original single-fold subprocess behaviour, which is what the CI smoke step uses.
+
+---
+
 ## Leakage guarantees
 
 Every multimodal sample is keyed by `(stock_id, end_date)`. The pipeline enforces that for prediction date `D` with horizon `H`: tabular windows contain only rows with `date <= D`; text records are filtered to `event_date <= D`; candlestick chart filenames encode `D` (format `{SYMBOL}_{YYYYMMDD}.png`) and are generated from OHLCV data sliced to `date <= D`; KG context carries an `as_of_date` field equal to `D`; and the label is computed from prices at `D+1` through `D+H`, with NaN-labelled rows dropped so a sample is never emitted without valid future data.
@@ -302,9 +345,9 @@ These invariants are mechanically verified in [`tests/integration/test_no_leakag
 ## Current limitations
 
 - The real-world demo uses yfinance snapshots, so runs can differ over time unless you keep the generated `raw/` CSVs.
-- The text modality in the real-world demo currently uses deterministic market-summary records derived from real OHLCV features; external news/filing/PDF ingestion is a future enhancement.
+- The text modality in the real-world demo uses recent `yfinance` news and FinBERT, falling back to deterministic summaries for older historical dates.
 - Ablation metrics are classification metrics from short training runs unless you increase epochs and tune properly.
-- A portfolio backtest with cumulative returns, drawdown, turnover, and benchmark-relative performance is the next major evidence feature.
+- The included portfolio backtest is a simple top-k simulation without transaction costs or slippage.
 
 ---
 

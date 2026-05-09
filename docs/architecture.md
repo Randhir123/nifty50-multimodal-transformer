@@ -144,7 +144,7 @@ The compact Colab demo uses deliberately small dimensions so that the pipeline c
 |---|---:|---|
 | Rolling window | `20` | each tabular sample uses 20 historical rows |
 | Tabular feature count | `11` | engineered OHLCV / benchmark-relative features |
-| Text embedding dimension | `16` | deterministic lightweight text vector |
+| Text embedding dimension | `768` | FinBERT embedding of yfinance news and summaries |
 | Image embedding dimension | `16` | output of the demo image Transformer encoder |
 | KG embedding dimension | usually `4` | peer count, peer return, sector return, event flag; inspect NPZ for exact width |
 | Shared fusion dimension | `16` | common Transformer dimension after modality projections |
@@ -253,7 +253,7 @@ This vector is projected into the fusion model's shared 16-dimensional space.
 
 ### 7.1 Input
 
-The current real-world demo uses leakage-safe market-summary text records generated from real OHLCV-derived features.
+The current real-world demo uses actual news articles fetched via `yfinance` combined with leakage-safe market-summary text records for historical coverage.
 
 The key cutoff rule is:
 
