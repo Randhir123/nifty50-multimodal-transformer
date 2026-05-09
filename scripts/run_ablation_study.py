@@ -131,12 +131,89 @@ def build_train_command(
     return command
 
 
+def _load_trusted_local_checkpoint(checkpoint_path: str | Path) -> dict[str, object]:
+    """Load a checkpoint written by this local ablation run.
+
+    PyTorch 2.6+ defaults ``torch.load`` to ``weights_only=True``. These
+    checkpoints intentionally store small NumPy validation arrays for diagnostics,
+    so we explicitly load the trusted local file with ``weights_only=False``.
+    """
+    return torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+
+
 def load_checkpoint_metrics(checkpoint_path: str | Path) -> dict[str, float]:
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = _load_trusted_local_checkpoint(checkpoint_path)
     metrics = checkpoint.get("val_metrics")
     if not isinstance(metrics, dict):
         raise ValueError(f"Checkpoint does not include val_metrics: {checkpoint_path}")
     return {key: float(value) for key, value in metrics.items()}
+
+
+def load_checkpoint_predictions(checkpoint_path: str | Path) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
+    """Load validation labels, probabilities, and dates from a checkpoint."""
+    checkpoint = _load_trusted_local_checkpoint(checkpoint_path)
+    if "val_y_true" not in checkpoint or "val_y_prob" not in checkpoint:
+        raise ValueError(
+            "Checkpoint does not include validation predictions. "
+            "Re-run ablations with the updated training script."
+        )
+    y_true = np.asarray(checkpoint["val_y_true"]).astype(np.int64)
+    y_prob = np.asarray(checkpoint["val_y_prob"]).astype(np.float32)
+    end_dates = checkpoint.get("val_end_dates")
+    if end_dates is not None:
+        end_dates = np.asarray(end_dates)
+    return y_true, y_prob, end_dates
+
+
+def summarize_predictions(y_true: np.ndarray, y_prob: np.ndarray) -> dict[str, float]:
+    """Return threshold and class-distribution diagnostics."""
+    y_pred = (y_prob >= 0.5).astype(np.int64)
+    total = int(y_true.shape[0])
+    positives = int(y_true.sum())
+    negatives = total - positives
+    positive_rate = positives / total if total else 0.0
+    majority_class_accuracy = max(positive_rate, 1.0 - positive_rate) if total else 0.0
+    predicted_positive_rate = float(y_pred.mean()) if total else 0.0
+    return {
+        "val_count": float(total),
+        "val_positive_count": float(positives),
+        "val_negative_count": float(negatives),
+        "val_positive_rate": float(positive_rate),
+        "majority_class_accuracy": float(majority_class_accuracy),
+        "predicted_positive_rate": predicted_positive_rate,
+        "probability_min": float(np.min(y_prob)) if total else 0.0,
+        "probability_mean": float(np.mean(y_prob)) if total else 0.0,
+        "probability_max": float(np.max(y_prob)) if total else 0.0,
+    }
+
+
+def write_prediction_scores(
+    *,
+    variant: AblationVariant,
+    y_true: np.ndarray,
+    y_prob: np.ndarray,
+    end_dates: np.ndarray | None,
+    output_dir: str | Path,
+) -> Path:
+    """Write validation probabilities for one ablation variant."""
+    output_path = Path(output_dir)
+    scores_path = output_path / f"prediction_scores_{variant.name}.csv"
+    y_pred = (y_prob >= 0.5).astype(np.int64)
+    with scores_path.open("w", newline="", encoding="utf-8") as handle:
+        fieldnames = ["row_id", "end_date", "y_true", "y_prob", "y_pred"]
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
+        writer.writeheader()
+        for i, (label, prob, pred) in enumerate(zip(y_true, y_prob, y_pred)):
+            writer.writerow(
+                {
+                    "row_id": i,
+                    "end_date": "" if end_dates is None else str(end_dates[i]),
+                    "y_true": int(label),
+                    "y_prob": float(prob),
+                    "y_pred": int(pred),
+                }
+            )
+    return scores_path
 
 
 def write_results(results: list[dict[str, object]], output_dir: str | Path) -> tuple[Path, Path]:
@@ -149,12 +226,22 @@ def write_results(results: list[dict[str, object]], output_dir: str | Path) -> t
         "variant",
         "modalities",
         "checkpoint_path",
+        "prediction_scores_path",
         "command",
         "accuracy",
         "precision",
         "recall",
         "f1",
         "roc_auc",
+        "val_count",
+        "val_positive_count",
+        "val_negative_count",
+        "val_positive_rate",
+        "majority_class_accuracy",
+        "predicted_positive_rate",
+        "probability_min",
+        "probability_mean",
+        "probability_max",
     ]
     with csv_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
@@ -164,6 +251,71 @@ def write_results(results: list[dict[str, object]], output_dir: str | Path) -> t
 
     json_path.write_text(json.dumps(results, indent=2), encoding="utf-8")
     return csv_path, json_path
+
+
+def write_diagnostics(results: list[dict[str, object]], output_dir: str | Path) -> Path:
+    """Write a human-readable diagnostics summary for demo interpretation."""
+    output_path = Path(output_dir)
+    diagnostics_path = output_path / "ablation_diagnostics.md"
+    lines = [
+        "# Ablation diagnostics",
+        "",
+        "This file summarizes validation diagnostics for the ablation run.",
+        "",
+        "These metrics are useful for checking whether the pipeline is working and whether a run has collapsed to a majority-class prediction. They are not a portfolio backtest and should not be presented as investment performance.",
+        "",
+        "## Summary table",
+        "",
+        "| Variant | Accuracy | ROC-AUC | F1 | Val positive rate | Majority baseline | Predicted positive rate | Probability mean |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|",
+    ]
+    for row in results:
+        lines.append(
+            "| {variant} | {accuracy:.4f} | {roc_auc:.4f} | {f1:.4f} | {val_positive_rate:.4f} | {majority_class_accuracy:.4f} | {predicted_positive_rate:.4f} | {probability_mean:.4f} |".format(
+                variant=row["variant"],
+                accuracy=float(row.get("accuracy", 0.0)),
+                roc_auc=float(row.get("roc_auc", 0.0)),
+                f1=float(row.get("f1", 0.0)),
+                val_positive_rate=float(row.get("val_positive_rate", 0.0)),
+                majority_class_accuracy=float(row.get("majority_class_accuracy", 0.0)),
+                predicted_positive_rate=float(row.get("predicted_positive_rate", 0.0)),
+                probability_mean=float(row.get("probability_mean", 0.0)),
+            )
+        )
+
+    collapsed = [
+        str(row["variant"])
+        for row in results
+        if float(row.get("predicted_positive_rate", 0.0)) in (0.0, 1.0)
+    ]
+    lines.extend(["", "## Interpretation notes", ""])
+    if collapsed:
+        lines.extend(
+            [
+                "The following variants predicted only one class at the default 0.5 threshold:",
+                "",
+                "```text",
+                *collapsed,
+                "```",
+                "",
+                "When this happens, accuracy can match the majority-class baseline while precision, recall, or F1 may be uninformative. Use ROC-AUC and the exported probability score files to inspect whether the ranking signal varies before making any claim about model quality.",
+            ]
+        )
+    else:
+        lines.append(
+            "No variant predicted only one class at the default 0.5 threshold. Still compare accuracy to the majority baseline and inspect probability distributions before interpreting results."
+        )
+    lines.extend(
+        [
+            "",
+            "## Recommended demo language",
+            "",
+            "> The ablation runner is working and produces comparable metrics across modality combinations. However, these compact runs are pipeline evidence, not investment-grade performance claims. We inspect majority-class baseline, positive prediction rate, and ROC-AUC to avoid over-interpreting accuracy.",
+            "",
+        ]
+    )
+    diagnostics_path.write_text("\n".join(lines), encoding="utf-8")
+    return diagnostics_path
 
 
 def run_ablation_study(args: argparse.Namespace) -> list[dict[str, object]]:
@@ -193,22 +345,35 @@ def run_ablation_study(args: argparse.Namespace) -> list[dict[str, object]]:
         print(f"Running ablation variant: {variant.name}")
         subprocess.run(command, check=True)
         metrics = load_checkpoint_metrics(checkpoint_path)
+        y_true, y_prob, end_dates = load_checkpoint_predictions(checkpoint_path)
+        diagnostics = summarize_predictions(y_true, y_prob)
+        scores_path = write_prediction_scores(
+            variant=variant,
+            y_true=y_true,
+            y_prob=y_prob,
+            end_dates=end_dates,
+            output_dir=output_dir,
+        )
         results.append(
             {
                 "variant": variant.name,
                 "modalities": "+".join(variant.modalities),
                 "checkpoint_path": str(checkpoint_path),
+                "prediction_scores_path": str(scores_path),
                 "command": " ".join(command),
                 "accuracy": metrics.get("accuracy", ""),
                 "precision": metrics.get("precision", ""),
                 "recall": metrics.get("recall", ""),
                 "f1": metrics.get("f1", ""),
                 "roc_auc": metrics.get("roc_auc", ""),
+                **diagnostics,
             }
         )
     csv_path, json_path = write_results(results, output_dir)
+    diagnostics_path = write_diagnostics(results, output_dir)
     print(f"Wrote ablation CSV: {csv_path}")
     print(f"Wrote ablation JSON: {json_path}")
+    print(f"Wrote ablation diagnostics: {diagnostics_path}")
     return results
 
 

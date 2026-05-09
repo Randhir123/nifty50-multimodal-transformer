@@ -279,6 +279,10 @@ def train_fusion_transformer(args: argparse.Namespace) -> None:
                     "config": config.__dict__,
                     "epoch": epoch,
                     "val_metrics": val_metrics,
+                    "val_loss": float(val_loss),
+                    "val_y_true": val_y.astype(np.int64),
+                    "val_y_prob": val_prob.astype(np.float32),
+                    "val_end_dates": val_arrays.end_dates,
                 },
                 checkpoint_path,
             )
