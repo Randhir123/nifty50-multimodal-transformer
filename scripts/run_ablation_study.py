@@ -131,8 +131,18 @@ def build_train_command(
     return command
 
 
+def _load_trusted_local_checkpoint(checkpoint_path: str | Path) -> dict[str, object]:
+    """Load a checkpoint written by this local ablation run.
+
+    PyTorch 2.6+ defaults ``torch.load`` to ``weights_only=True``. These
+    checkpoints intentionally store small NumPy validation arrays for diagnostics,
+    so we explicitly load the trusted local file with ``weights_only=False``.
+    """
+    return torch.load(checkpoint_path, map_location="cpu", weights_only=False)
+
+
 def load_checkpoint_metrics(checkpoint_path: str | Path) -> dict[str, float]:
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = _load_trusted_local_checkpoint(checkpoint_path)
     metrics = checkpoint.get("val_metrics")
     if not isinstance(metrics, dict):
         raise ValueError(f"Checkpoint does not include val_metrics: {checkpoint_path}")
@@ -141,7 +151,7 @@ def load_checkpoint_metrics(checkpoint_path: str | Path) -> dict[str, float]:
 
 def load_checkpoint_predictions(checkpoint_path: str | Path) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
     """Load validation labels, probabilities, and dates from a checkpoint."""
-    checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    checkpoint = _load_trusted_local_checkpoint(checkpoint_path)
     if "val_y_true" not in checkpoint or "val_y_prob" not in checkpoint:
         raise ValueError(
             "Checkpoint does not include validation predictions. "
