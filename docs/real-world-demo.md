@@ -347,15 +347,16 @@ If the final ablation file does not exist, rerun with `--run-ablations`.
 
 ## What to build next for a stronger demo
 
-The highest-value next features are:
+The highest-value next feature is:
 
-1. `scripts/visualize_real_world_demo.py`  
-   Generate actual embedding projection charts and ablation bar charts from the real demo outputs.
-
-2. `scripts/run_backtest.py`  
+1. `scripts/run_backtest.py`  
    Convert ranked predictions into a simple top-k portfolio backtest versus `^NSEI`.
 
-3. Prediction export from each ablation model  
-   Save per-sample probabilities for modality agreement/conflict visualization.
+The visualization script is now implemented:
 
-These three additions will make the recording much stronger because the visuals will come from actual data, not hand-drawn conceptual slides.
+```bash
+python scripts/visualize_real_world_demo.py \
+  --demo-dir data/processed/real_world_demo
+```
+
+This generates embedding projection PNGs and ablation bar charts directly from the real demo outputs. Run it after `--run-ablations` to produce the demo visuals.

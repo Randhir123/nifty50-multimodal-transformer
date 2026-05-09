@@ -28,7 +28,7 @@ This lets the fusion Transformer learn from numbers, chart structure, text conte
 
 This repository is no longer just a collection of modality-specific modules. It now has an end-to-end path that builds real aligned multimodal samples and trains/evaluates fusion variants.
 
-Implemented today:
+What's implemented:
 
 - aligned multimodal sample contract;
 - real tabular rolling-window sample builder;
@@ -257,6 +257,13 @@ python scripts/run_ablation_study.py \
   --num-heads 4 \
   --num-layers 1 \
   --ff-dim 32
+```
+
+Generate visualization artifacts (embedding projections + ablation bar charts):
+
+```bash
+python scripts/visualize_real_world_demo.py \
+  --demo-dir data/processed/real_world_demo
 ```
 
 ---

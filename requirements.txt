@@ -12,7 +12,6 @@ mplfinance==0.12.10b0
 networkx>=3.3
 # Visualisation
 matplotlib>=3.8
-umap-learn>=0.5
 # Utilities
 tqdm>=4.66
 pydantic>=2.6
