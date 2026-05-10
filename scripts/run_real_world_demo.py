@@ -51,9 +51,11 @@ from src.data.multimodal_samples import (
     attach_gaf_mtf_image_tokens,
     attach_image_tokens,
     attach_kg_tokens,
+    attach_kg_v2_tokens,
     build_tabular_multimodal_samples,
     save_multimodal_samples,
 )
+from src.data.sector_mapping import NIFTY50_SECTOR_MAPPING
 from src.data.text import normalize_company_text_records
 from src.kg.build_graph import build_market_knowledge_graph
 from src.models.image_transformer import ImageTransformerConfig
@@ -61,11 +63,7 @@ from src.models.text_encoder import TextEncoder, TextEncoderConfig
 from src.viz.charts import generate_or_resolve_sample_chart
 
 DEFAULT_TICKERS = ["RELIANCE.NS", "TCS.NS", "INFY.NS"]
-DEFAULT_SECTORS = {
-    "RELIANCE.NS": "Energy",
-    "TCS.NS": "IT",
-    "INFY.NS": "IT",
-}
+DEFAULT_SECTORS = NIFTY50_SECTOR_MAPPING
 FEATURE_COLUMNS = [
     "log_return_1d",
     "cum_return_3d",
@@ -401,6 +399,12 @@ def build_arg_parser() -> argparse.ArgumentParser:
                         help="Calendar-day embargo before each CV test fold.")
     parser.add_argument("--single-split", action="store_true",
                         help="Force single-split mode; overrides --cv-splits.")
+    parser.add_argument(
+        "--kg-version",
+        choices=["v1", "v2"],
+        default="v2",
+        help="KG feature builder to use. v2 is the richer sector/peer/regime default.",
+    )
     return parser
 
 
@@ -433,7 +437,7 @@ def main() -> None:
     text_records_csv = output_dir / "text_records.csv"
     text_records.to_csv(text_records_csv, index=False)
 
-    sectors = {ticker: DEFAULT_SECTORS.get(ticker, "Unknown") for ticker in args.tickers}
+    sectors = {ticker: DEFAULT_SECTORS.get(ticker, "infra_other") for ticker in args.tickers}
     stock_sectors = pd.DataFrame(
         [{"stock_id": ticker, "sector_id": sector} for ticker, sector in sectors.items()]
     )
@@ -459,9 +463,17 @@ def main() -> None:
         chart_dir=chart_dir,
         chart_lookback_days=args.chart_lookback_days,
     )
-    graph = build_market_knowledge_graph(sectors, event_records=event_records)
     arrays = _attach_finbert_text_tokens(arrays, text_records, device=args.device)
-    arrays = attach_kg_tokens(arrays, graph, returns=kg_returns)
+    if args.kg_version == "v2":
+        arrays = attach_kg_v2_tokens(
+            arrays,
+            universe_ohlcv=stock_data,
+            benchmark_ohlcv=benchmark_df,
+            sector_mapping=sectors,
+        )
+    else:
+        graph = build_market_knowledge_graph(sectors, event_records=event_records)
+        arrays = attach_kg_tokens(arrays, graph, returns=kg_returns)
     arrays = attach_gaf_mtf_image_tokens(
         arrays,
         raw_dir=raw_dir,

@@ -19,6 +19,7 @@ import numpy as np
 import pandas as pd
 import torch
 
+from src.data.kg_features_v2 import build_kg_v2
 from src.data.text import build_company_text_input, normalize_company_text_records
 from src.kg.query_graph import retrieve_kg_context
 from src.models.image_transformer import ImageTransformer, ImageTransformerConfig
@@ -464,6 +465,26 @@ def attach_kg_tokens(
         index_id=index_id,
     )
     enriched = replace(arrays, kg_tokens=kg_tokens)
+    enriched.validate()
+    return enriched
+
+
+def attach_kg_v2_tokens(
+    arrays: MultimodalSampleArrays,
+    *,
+    universe_ohlcv: dict[str, pd.DataFrame],
+    benchmark_ohlcv: pd.DataFrame,
+    sector_mapping: dict[str, str] | None = None,
+) -> MultimodalSampleArrays:
+    """Return a copy of ``arrays`` with KG v2 relational features aligned by row."""
+    result = build_kg_v2(
+        universe_ohlcv=universe_ohlcv,
+        benchmark_ohlcv=benchmark_ohlcv,
+        sector_mapping=sector_mapping,
+        stock_ids=arrays.stock_ids,
+        end_dates=arrays.end_dates,
+    )
+    enriched = replace(arrays, kg_tokens=result.values)
     enriched.validate()
     return enriched
 

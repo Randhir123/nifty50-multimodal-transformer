@@ -68,6 +68,10 @@ Note: with a randomly initialized CNN, GAF/MTF image tokens carry no linear sign
 
 The per-fold standard deviation is large relative to the deltas. With 3 folds and 1 seed, these numbers describe the direction of effect rather than its magnitude with precision. Multi-seed evaluation with more folds would tighten these estimates.
 
+### KG v2 feature upgrade
+
+Session 10a.3 replaced the compact dynamic-width KG context token with a 37-feature leakage-safe relational vector. The new vector includes sector one-hot membership, sector return/beta/volatility context, rolling peer correlations, sector-relative return and volume ranks/z-scores, lead-lag correlations, peer dispersion/spreads, Nifty50 trend/volatility-regime features, sector-rotation indicators, and a sparse-peer flag. The fusion model already projects KG inputs through `Linear(kg_dim, model_dim)`, so the wider vector competes on the same projected dimension as text and image. The empirical contribution is pending a fresh Colab ablation run on a KG v2 artifact.
+
 ---
 
 ## Diagnostic narratives

@@ -1,0 +1,4 @@
+metric,old_kg,new_kg,status
+tabular_kg,0.138,,pending_rerun
+text_kg,0.197,,pending_rerun
+image_kg,0.064,,pending_rerun

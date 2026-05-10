@@ -27,7 +27,7 @@ Four modalities are projected into a shared embedding space and mixed by Transfo
 - **Tabular**: 11 OHLCV-derived technical features over a 20-day rolling window (see [`src/data/features.py`](src/data/features.py)). No global normalization; leakage-free.
 - **Text**: Real financial news fetched from `yfinance` and encoded by FinBERT (768-dim), filtered to `event_date <= prediction_date`. Falls back to deterministic summaries when news is unavailable for a date.
 - **Image**: Gramian Angular Field (GAF) + Markov Transition Field (MTF) images from the 20-day close-price window, encoded by a 3-layer CNN (see [`src/models/image_cnn.py`](src/models/image_cnn.py)). Replaces the earlier candlestick PNG + ViT approach (see "What didn't" below).
-- **Knowledge graph**: 4-dim sector, peer, event, and recent-return context aligned by `(stock_id, prediction_date)`.
+- **Knowledge graph**: 37-dim sector, peer, and market-regime context aligned by `(stock_id, prediction_date)`.
 
 ```text
 tabular tokens  ----\
@@ -66,7 +66,7 @@ Each modality's contribution is verified by distance correlation between mean-po
 
 The image modality (GAF/MTF + CNN) is the largest single addition (+0.028 AUC over tabular_only), more than doubling the text contribution (+0.014). The KG contribution (+0.001) is indistinguishable from noise at this dataset scale. The all-four combination (0.5222) is marginally below image-alone (0.5242), consistent with mild noise from text and KG on a 1,242-sample dataset.
 
-With only 3 folds and a single random seed, the *ordering* of contributions is interpretable but individual deltas should not be taken as precise estimates. Multi-seed evaluation would be needed for confidence intervals. What the data supports: image carries independent temporal-shape signal that tabular rolling statistics discard; text carries recent news sentiment independently of price features; KG adds weak peer context at this dataset scale.
+With only 3 folds and a single random seed, the *ordering* of contributions is interpretable but individual deltas should not be taken as precise estimates. Multi-seed evaluation would be needed for confidence intervals. What the data supports so far: image carries independent temporal-shape signal that tabular rolling statistics discard; text carries recent news sentiment independently of price features; the upgraded KG v2 branch is now capacity-comparable but still needs a fresh ablation run before making a contribution claim.
 
 ### Train→val transfer fails on volatility regime shifts
 

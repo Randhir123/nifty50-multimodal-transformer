@@ -1,0 +1,6 @@
+variant,old_roc_auc_mean,old_roc_auc_std,new_roc_auc_mean,new_roc_auc_std,status
+tabular_only,0.4963,0.085,,,pending_rerun
+tabular_kg,0.4974,0.063,,,pending_rerun
+tabular_image,0.5242,0.067,,,pending_rerun
+tabular_text,0.5104,0.074,,,pending_rerun
+tabular_image_text_kg,0.5222,0.058,,,pending_rerun

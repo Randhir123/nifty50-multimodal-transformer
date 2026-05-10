@@ -24,6 +24,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
+from src.data.kg_features_v2 import build_kg_v2
 from src.data.multimodal_samples import (
     MultimodalSampleArrays,
     attach_kg_tokens,
@@ -113,6 +114,19 @@ def _make_kg_returns(tabular_df: pd.DataFrame) -> pd.DataFrame:
 
 def _empty_events() -> pd.DataFrame:
     return pd.DataFrame(columns=["stock_id", "event_date", "event_type"])
+
+
+def _ohlcv_frame(dates: pd.DatetimeIndex, close: np.ndarray) -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "date": dates,
+            "open": close,
+            "high": close * 1.01,
+            "low": close * 0.99,
+            "close": close,
+            "volume": np.linspace(1_000_000, 2_000_000, len(close)),
+        }
+    )
 
 
 # ── Class-scoped fixture: build the full artifact once ───────────────────────
@@ -235,6 +249,43 @@ class TestNoLeakage:
             assert context_date == end_date, (
                 f"KG as_of_date {context_date} != end_date {end_date} for {stock_id}"
             )
+
+    def test_kg_v2_no_future_window_leakage(self) -> None:
+        """KG v2 rolling and peer features must ignore post-D sentinel values."""
+        dates = pd.bdate_range("2024-01-01", periods=80)
+        cutoff = dates[50]
+        base = np.arange(80, dtype=float)
+        universe = {
+            "AAA.NS": _ohlcv_frame(dates, 100.0 + base * 0.2),
+            "BBB.NS": _ohlcv_frame(dates, 120.0 + base * 0.3),
+            "CCC.NS": _ohlcv_frame(dates, 200.0 + base * 0.1),
+        }
+        benchmark = _ohlcv_frame(dates, 1000.0 + base * 0.15)
+        poisoned_universe = {ticker: frame.copy() for ticker, frame in universe.items()}
+        poisoned_benchmark = benchmark.copy()
+
+        for frame in [*poisoned_universe.values(), poisoned_benchmark]:
+            future_mask = frame["date"] > cutoff
+            frame.loc[future_mask, "close"] = 999_999.0
+            frame.loc[future_mask, "volume"] = 999_999_999.0
+
+        kwargs = dict(
+            sector_mapping={"AAA.NS": "it", "BBB.NS": "it", "CCC.NS": "energy"},
+            stock_ids=["AAA.NS", "BBB.NS", "CCC.NS"],
+            end_dates=[cutoff, cutoff, cutoff],
+        )
+        clean = build_kg_v2(
+            universe_ohlcv=universe,
+            benchmark_ohlcv=benchmark,
+            **kwargs,
+        ).values
+        poisoned = build_kg_v2(
+            universe_ohlcv=poisoned_universe,
+            benchmark_ohlcv=poisoned_benchmark,
+            **kwargs,
+        ).values
+
+        np.testing.assert_allclose(clean, poisoned)
 
     # ── Invariant 5: label window does not overlap tabular window ────────────
 
