@@ -27,7 +27,7 @@ Four modalities are projected into a shared embedding space and mixed by Transfo
 - **Tabular**: 11 OHLCV-derived technical features over a 20-day rolling window (see [`src/data/features.py`](src/data/features.py)). No global normalization; leakage-free.
 - **Text**: Real financial news fetched from `yfinance` and encoded by FinBERT (768-dim), filtered to `event_date <= prediction_date`. Falls back to deterministic summaries when news is unavailable for a date.
 - **Image**: Gramian Angular Field (GAF) + Markov Transition Field (MTF) images from the 20-day close-price window, encoded by a 3-layer CNN (see [`src/models/image_cnn.py`](src/models/image_cnn.py)). Replaces the earlier candlestick PNG + ViT approach (see "What didn't" below).
-- **Knowledge graph**: 37-dim sector, peer, and market-regime context aligned by `(stock_id, prediction_date)`.
+- **Knowledge graph**: 37-dim sector, peer, and market-regime context aligned by `(stock_id, prediction_date)`. KG features can be computed from a larger OHLCV-only peer universe while training remains on a smaller stock set.
 
 ```text
 tabular tokens  ----\

@@ -473,12 +473,14 @@ def attach_kg_v2_tokens(
     arrays: MultimodalSampleArrays,
     *,
     universe_ohlcv: dict[str, pd.DataFrame],
+    peer_ohlcv: dict[str, pd.DataFrame] | None = None,
     benchmark_ohlcv: pd.DataFrame,
     sector_mapping: dict[str, str] | None = None,
 ) -> MultimodalSampleArrays:
     """Return a copy of ``arrays`` with KG v2 relational features aligned by row."""
     result = build_kg_v2(
-        universe_ohlcv=universe_ohlcv,
+        training_ohlcv=universe_ohlcv,
+        peer_ohlcv=peer_ohlcv or universe_ohlcv,
         benchmark_ohlcv=benchmark_ohlcv,
         sector_mapping=sector_mapping,
         stock_ids=arrays.stock_ids,

@@ -287,6 +287,38 @@ class TestNoLeakage:
 
         np.testing.assert_allclose(clean, poisoned)
 
+    def test_kg_v2_peer_universe_no_leakage(self) -> None:
+        """KG v2 peer-universe path must ignore post-D peer sentinel values."""
+        dates = pd.bdate_range("2024-01-01", periods=80)
+        cutoff = dates[50]
+        base = np.arange(80, dtype=float)
+        training = {"AAA.NS": _ohlcv_frame(dates, 100.0 + base * 0.2)}
+        peer_universe = {
+            "AAA.NS": _ohlcv_frame(dates, 100.0 + base * 0.2),
+            "BBB.NS": _ohlcv_frame(dates, 120.0 + base * 0.3),
+            "CCC.NS": _ohlcv_frame(dates, 130.0 + base * 0.4),
+        }
+        benchmark = _ohlcv_frame(dates, 1000.0 + base * 0.15)
+        poisoned_peers = {ticker: frame.copy() for ticker, frame in peer_universe.items()}
+        for ticker, frame in poisoned_peers.items():
+            if ticker == "AAA.NS":
+                continue
+            future_mask = frame["date"] > cutoff
+            frame.loc[future_mask, "close"] = 999_999.0
+            frame.loc[future_mask, "volume"] = 999_999_999.0
+
+        kwargs = dict(
+            training_ohlcv=training,
+            benchmark_ohlcv=benchmark,
+            sector_mapping={"AAA.NS": "it", "BBB.NS": "it", "CCC.NS": "it"},
+            stock_ids=["AAA.NS"],
+            end_dates=[cutoff],
+        )
+        clean = build_kg_v2(peer_ohlcv=peer_universe, **kwargs).values
+        poisoned = build_kg_v2(peer_ohlcv=poisoned_peers, **kwargs).values
+
+        np.testing.assert_allclose(clean, poisoned)
+
     # ── Invariant 5: label window does not overlap tabular window ────────────
 
     def test_label_uses_only_future_data(self, artifact: tuple) -> None:

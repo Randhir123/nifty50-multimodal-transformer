@@ -72,6 +72,8 @@ The per-fold standard deviation is large relative to the deltas. With 3 folds an
 
 Session 10a.3 replaced the compact dynamic-width KG context token with a 37-feature leakage-safe relational vector. The new vector includes sector one-hot membership, sector return/beta/volatility context, rolling peer correlations, sector-relative return and volume ranks/z-scores, lead-lag correlations, peer dispersion/spreads, Nifty50 trend/volatility-regime features, sector-rotation indicators, and a sparse-peer flag. The fusion model already projects KG inputs through `Linear(kg_dim, model_dim)`, so the wider vector competes on the same projected dimension as text and image. The empirical contribution is pending a fresh Colab ablation run on a KG v2 artifact.
 
+Session 10a.4 decoupled the KG peer universe from the training universe. The model can still train on the 6-stock smoke set, but KG v2 sector/peer features may now be computed over an OHLCV-only peer universe of additional Nifty50 constituents. This makes sector rank, sector z-scores, peer correlations, sector index returns, and sector beta refer to the stock's broader peer set instead of only the stocks sampled for training. Training tickers are required to be present in the peer universe, peer ticker sector mappings are strict, and post-D peer OHLCV sentinel tests guard the no-future-data contract.
+
 ---
 
 ## Diagnostic narratives

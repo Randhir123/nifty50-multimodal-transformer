@@ -43,6 +43,7 @@ from src.data.download_yfinance import (
     deterministic_csv_path_for_ticker,
     download_benchmark_data,
     download_multiple_tickers,
+    read_tickers_from_file,
     save_ticker_csv,
 )
 from src.data.features import compute_technical_features
@@ -103,24 +104,27 @@ def _load_or_download(
     stock_data: dict[str, pd.DataFrame] = {}
 
     missing = []
-    today = date.today()
     for ticker in tickers:
         path = deterministic_csv_path_for_ticker(ticker, raw_dir)
-        if path.exists() and not force_refresh and date.fromtimestamp(path.stat().st_mtime) == today:
+        if path.exists() and not force_refresh:
             stock_data[ticker] = pd.read_csv(path, parse_dates=["date"])
             provenance[ticker] = f"cache:{path}"
         else:
             missing.append(ticker)
 
-    if missing:
-        downloaded = download_multiple_tickers(missing, start=start, end=end)
-        for ticker, df in downloaded.items():
+    for ticker in missing:
+        try:
+            downloaded = download_multiple_tickers([ticker], start=start, end=end)
+            df = downloaded[ticker]
             save_path = save_ticker_csv(ticker, df, output_dir=raw_dir)
             stock_data[ticker] = df
             provenance[ticker] = f"download:{save_path}"
+        except Exception as exc:
+            provenance[ticker] = f"failed:{exc}"
+            print(f"Warning: failed to download {ticker}: {exc}")
 
     benchmark_path = deterministic_csv_path_for_ticker(benchmark, raw_dir)
-    if benchmark_path.exists() and not force_refresh and date.fromtimestamp(benchmark_path.stat().st_mtime) == today:
+    if benchmark_path.exists() and not force_refresh:
         benchmark_df = pd.read_csv(benchmark_path, parse_dates=["date"])
         provenance[benchmark] = f"cache:{benchmark_path}"
     else:
@@ -129,6 +133,15 @@ def _load_or_download(
         provenance[benchmark] = f"download:{save_path}"
 
     return stock_data, benchmark_df, provenance
+
+
+def _parse_peer_tickers(raw: str | None, file_path: str | None) -> list[str]:
+    tickers: list[str] = []
+    if file_path:
+        tickers.extend(read_tickers_from_file(file_path))
+    if raw:
+        tickers.extend([ticker.strip() for ticker in raw.split(",") if ticker.strip()])
+    return list(dict.fromkeys(tickers))
 
 
 def _build_tabular_rows(
@@ -405,6 +418,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         default="v2",
         help="KG feature builder to use. v2 is the richer sector/peer/regime default.",
     )
+    parser.add_argument(
+        "--peer-tickers",
+        default=None,
+        help="Comma-separated extra OHLCV-only tickers for KG peer-universe features.",
+    )
+    parser.add_argument(
+        "--peer-tickers-file",
+        default=None,
+        help="Optional file with one OHLCV-only peer ticker per line.",
+    )
     return parser
 
 
@@ -416,14 +439,22 @@ def main() -> None:
     output_dir.mkdir(parents=True, exist_ok=True)
 
     start = args.start or _resolve_start_date(args.period, args.end)
-    stock_data, benchmark_df, provenance = _load_or_download(
-        tickers=args.tickers,
+    peer_tickers = _parse_peer_tickers(args.peer_tickers, args.peer_tickers_file)
+    peer_universe_tickers = list(dict.fromkeys([*args.tickers, *peer_tickers]))
+
+    all_ohlcv, benchmark_df, provenance = _load_or_download(
+        tickers=peer_universe_tickers,
         benchmark=args.benchmark,
         start=start,
         end=args.end,
         raw_dir=raw_dir,
         force_refresh=args.force_refresh,
     )
+    stock_data = {ticker: all_ohlcv[ticker] for ticker in args.tickers if ticker in all_ohlcv}
+    peer_data = {ticker: all_ohlcv[ticker] for ticker in peer_universe_tickers if ticker in all_ohlcv}
+    missing_training = sorted(set(args.tickers) - set(stock_data))
+    if missing_training:
+        raise ValueError(f"Missing OHLCV for training tickers: {missing_training}")
 
     tabular_df = _build_tabular_rows(
         stock_data=stock_data,
@@ -437,9 +468,9 @@ def main() -> None:
     text_records_csv = output_dir / "text_records.csv"
     text_records.to_csv(text_records_csv, index=False)
 
-    sectors = {ticker: DEFAULT_SECTORS.get(ticker, "infra_other") for ticker in args.tickers}
+    sectors = {ticker: DEFAULT_SECTORS[ticker] for ticker in peer_data}
     stock_sectors = pd.DataFrame(
-        [{"stock_id": ticker, "sector_id": sector} for ticker, sector in sectors.items()]
+        [{"stock_id": ticker, "sector_id": sectors[ticker]} for ticker in args.tickers]
     )
     stock_sectors_csv = output_dir / "stock_sectors.csv"
     stock_sectors.to_csv(stock_sectors_csv, index=False)
@@ -468,6 +499,7 @@ def main() -> None:
         arrays = attach_kg_v2_tokens(
             arrays,
             universe_ohlcv=stock_data,
+            peer_ohlcv=peer_data,
             benchmark_ohlcv=benchmark_df,
             sector_mapping=sectors,
         )
@@ -491,6 +523,9 @@ def main() -> None:
 
     summary = {
         "tickers": args.tickers,
+        "peer_tickers": peer_tickers,
+        "peer_universe_tickers": peer_universe_tickers,
+        "peer_tickers_loaded": sorted(peer_data),
         "benchmark": args.benchmark,
         "start": start,
         "end": args.end,

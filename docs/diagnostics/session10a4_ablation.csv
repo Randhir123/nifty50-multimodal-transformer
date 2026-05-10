@@ -1,0 +1,6 @@
+metric,previous_6stock_kg_v2,new_peer_universe_kg_v2,status
+tabular_kg_delta_roc_auc,0.045,,pending_rerun
+tabular_kg_roc_auc_mean,,,pending_rerun
+tabular_only_roc_auc_mean,,,pending_rerun
+backtest_sharpe,1.64,,pending_rerun
+tabular_kg_independence,0.130,,pending_rerun

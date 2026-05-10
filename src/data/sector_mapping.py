@@ -48,10 +48,28 @@ NIFTY50_SECTOR_MAPPING: dict[str, str] = {
     "CIPLA.NS": "pharma",
     "DIVISLAB.NS": "pharma",
     "APOLLOHOSP.NS": "pharma",
+    "MAXHEALTH.NS": "pharma",
     "TATASTEEL.NS": "metals",
     "JSWSTEEL.NS": "metals",
     "HINDALCO.NS": "metals",
     "ADANIENT.NS": "metals",
+    "ADANIPORTS.NS": "infra_other",
+    "ASIANPAINT.NS": "infra_other",
+    "BAJFINANCE.NS": "banking",
+    "BAJAJFINSV.NS": "banking",
+    "BEL.NS": "infra_other",
+    "BHARTIARTL.NS": "infra_other",
+    "ETERNAL.NS": "infra_other",
+    "GRASIM.NS": "infra_other",
+    "HDFCLIFE.NS": "banking",
+    "INDIGO.NS": "infra_other",
+    "JIOFIN.NS": "banking",
+    "LT.NS": "infra_other",
+    "SBILIFE.NS": "banking",
+    "SHRIRAMFIN.NS": "banking",
+    "TITAN.NS": "infra_other",
+    "TRENT.NS": "infra_other",
+    "ULTRACEMCO.NS": "infra_other",
 }
 
 
@@ -67,3 +85,15 @@ def sector_for_ticker(ticker: str, mapping: dict[str, str] | None = None) -> str
     """Resolve a ticker to one of the canonical sector names."""
     sectors = mapping or NIFTY50_SECTOR_MAPPING
     return sectors.get(normalize_ticker(ticker), "infra_other")
+
+
+def strict_sector_for_ticker(ticker: str, mapping: dict[str, str] | None = None) -> str:
+    """Resolve a ticker to a canonical sector, raising when unmapped."""
+    sectors = mapping or NIFTY50_SECTOR_MAPPING
+    normalized = normalize_ticker(ticker)
+    if normalized not in sectors:
+        raise KeyError(f"Missing sector mapping for ticker: {normalized}")
+    sector = sectors[normalized]
+    if sector not in SECTOR_NAMES:
+        raise KeyError(f"Ticker {normalized} maps to unknown sector: {sector}")
+    return sector

@@ -8,7 +8,7 @@ from typing import Sequence
 import numpy as np
 import pandas as pd
 
-from src.data.sector_mapping import SECTOR_NAMES, sector_for_ticker
+from src.data.sector_mapping import SECTOR_NAMES, strict_sector_for_ticker
 
 EPS = 1e-8
 ROTATION_SECTORS = ("banking", "it", "energy", "fmcg")
@@ -51,7 +51,9 @@ class KGV2FeatureResult:
 
 def build_kg_v2(
     *,
-    universe_ohlcv: dict[str, pd.DataFrame],
+    training_ohlcv: dict[str, pd.DataFrame] | None = None,
+    peer_ohlcv: dict[str, pd.DataFrame] | None = None,
+    universe_ohlcv: dict[str, pd.DataFrame] | None = None,
     benchmark_ohlcv: pd.DataFrame,
     sector_mapping: dict[str, str] | None,
     stock_ids: Sequence[str],
@@ -60,24 +62,45 @@ def build_kg_v2(
     """Build leakage-safe sector, peer, and regime features per sample."""
     if len(stock_ids) != len(end_dates):
         raise ValueError("stock_ids and end_dates must have identical lengths")
-    if not universe_ohlcv:
-        raise ValueError("universe_ohlcv must not be empty")
+    if universe_ohlcv is not None:
+        if training_ohlcv is None:
+            training_ohlcv = universe_ohlcv
+        if peer_ohlcv is None:
+            peer_ohlcv = universe_ohlcv
+    if not training_ohlcv:
+        raise ValueError("training_ohlcv must not be empty")
+    if not peer_ohlcv:
+        raise ValueError("peer_ohlcv must not be empty")
 
-    prepared = {
+    training_keys = {str(ticker) for ticker in training_ohlcv}
+    peer_keys = {str(ticker) for ticker in peer_ohlcv}
+    missing_training = sorted(training_keys - peer_keys)
+    if missing_training:
+        raise ValueError(
+            "peer_ohlcv must contain all training tickers; missing: "
+            f"{missing_training}"
+        )
+
+    prepared_training = {
         str(ticker): _prepare_ohlcv(df)
-        for ticker, df in universe_ohlcv.items()
+        for ticker, df in training_ohlcv.items()
+    }
+    prepared_peers = {
+        str(ticker): _prepare_ohlcv(df)
+        for ticker, df in peer_ohlcv.items()
     }
     benchmark = _prepare_ohlcv(benchmark_ohlcv)
     ticker_to_sector = {
-        ticker: sector_for_ticker(ticker, sector_mapping)
-        for ticker in prepared
+        ticker: strict_sector_for_ticker(ticker, sector_mapping)
+        for ticker in prepared_peers
     }
 
     rows = [
         _build_one_row(
             stock_id=str(stock_id),
             end_date=pd.Timestamp(end_date).normalize(),
-            prepared=prepared,
+            training_prepared=prepared_training,
+            peer_prepared=prepared_peers,
             benchmark=benchmark,
             ticker_to_sector=ticker_to_sector,
         )
@@ -105,22 +128,25 @@ def _build_one_row(
     *,
     stock_id: str,
     end_date: pd.Timestamp,
-    prepared: dict[str, pd.DataFrame],
+    training_prepared: dict[str, pd.DataFrame],
+    peer_prepared: dict[str, pd.DataFrame],
     benchmark: pd.DataFrame,
     ticker_to_sector: dict[str, str],
 ) -> list[float]:
-    if stock_id not in prepared:
-        raise ValueError(f"stock_id {stock_id!r} not found in universe_ohlcv")
-    sector = ticker_to_sector.get(stock_id, "infra_other")
+    if stock_id not in training_prepared:
+        raise ValueError(f"stock_id {stock_id!r} not found in training_ohlcv")
+    if stock_id not in peer_prepared:
+        raise ValueError(f"stock_id {stock_id!r} not found in peer_ohlcv")
+    sector = ticker_to_sector[stock_id]
     sector_members = [
         ticker for ticker, ticker_sector in ticker_to_sector.items() if ticker_sector == sector
     ]
     peers = [ticker for ticker in sector_members if ticker != stock_id]
 
-    stock_hist = _history(prepared[stock_id], end_date)
+    stock_hist = _history(training_prepared[stock_id], end_date)
     benchmark_hist = _history(benchmark, end_date)
-    sector_returns = _sector_return_frame(prepared, sector_members, end_date)
-    peer_returns = _sector_return_frame(prepared, peers, end_date)
+    sector_returns = _sector_return_frame(peer_prepared, sector_members, end_date)
+    peer_returns = _sector_return_frame(peer_prepared, peers, end_date)
 
     values: list[float] = [1.0 if sector == name else 0.0 for name in SECTOR_NAMES]
     values.extend(
@@ -133,18 +159,18 @@ def _build_one_row(
         ]
     )
 
-    values.extend(_top_peer_correlations(prepared, stock_id, peers, end_date, window=60))
+    values.extend(_top_peer_correlations(peer_prepared, stock_id, peers, end_date, window=60))
     values.extend(
         [
-            _sector_rank_5d(prepared, stock_id, sector_members, end_date),
-            _sector_zscore(prepared, stock_id, sector_members, end_date, window=5, field="return"),
-            _sector_zscore(prepared, stock_id, sector_members, end_date, window=5, field="volume"),
-            _sector_zscore(prepared, stock_id, sector_members, end_date, window=20, field="return"),
+            _sector_rank_5d(peer_prepared, stock_id, sector_members, end_date),
+            _sector_zscore(peer_prepared, stock_id, sector_members, end_date, window=5, field="return"),
+            _sector_zscore(peer_prepared, stock_id, sector_members, end_date, window=5, field="volume"),
+            _sector_zscore(peer_prepared, stock_id, sector_members, end_date, window=20, field="return"),
             _lead_lag(stock_hist["log_return"], peer_returns["sector_return"], lag=1, window=20),
             _lead_lag(stock_hist["log_return"], peer_returns["sector_return"], lag=2, window=20),
-            _peer_dispersion_5d(prepared, peers, end_date),
-            _stock_peer_spread(prepared, stock_id, peers, end_date, window=5),
-            _stock_peer_spread(prepared, stock_id, peers, end_date, window=20),
+            _peer_dispersion_5d(peer_prepared, peers, end_date),
+            _stock_peer_spread(peer_prepared, stock_id, peers, end_date, window=5),
+            _stock_peer_spread(peer_prepared, stock_id, peers, end_date, window=20),
         ]
     )
 
@@ -158,7 +184,7 @@ def _build_one_row(
             / (_realized_vol(benchmark_hist["log_return"], 20) + EPS),
         ]
     )
-    values.extend(_sector_rotation(prepared, ticker_to_sector, end_date))
+    values.extend(_sector_rotation(peer_prepared, ticker_to_sector, end_date))
     values.append(float(len(peers) < 5))
     if len(values) != len(FEATURE_NAMES):
         raise RuntimeError(f"KG v2 feature count mismatch: {len(values)} != {len(FEATURE_NAMES)}")
