@@ -229,7 +229,7 @@ def write_prediction_scores(
     y_true: np.ndarray,
     y_prob: np.ndarray,
     end_dates: np.ndarray | None,
-    stock_ids: np.ndarray | None,
+    stock_ids: np.ndarray | None = None,
     output_dir: str | Path,
 ) -> Path:
     """Write validation probabilities for one ablation variant."""

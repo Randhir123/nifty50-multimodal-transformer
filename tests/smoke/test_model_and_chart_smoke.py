@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import torch
 
@@ -30,7 +31,9 @@ def test_candlestick_chart_generation_smoke(
     )
 
     assert chart_path.exists()
-    assert chart_path.suffix == ".png"
+    assert chart_path.suffix == ".npy"
+    chart = np.load(chart_path)
+    assert chart.shape == (2, 32, 32)
 
 
 def test_tabular_transformer_forward_pass_smoke() -> None:

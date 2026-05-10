@@ -19,10 +19,13 @@ def test_training_does_not_collapse():
     seq_len = 5
     dim = 8
     rng = np.random.default_rng(42)
-    
+    torch.manual_seed(42)
+
     tabular = rng.normal(0, 1, (n_samples, seq_len, dim)).astype(np.float32)
-    # Label is heavily correlated with the final timestep of feature 0
-    y = (tabular[:, -1, 0] > 0).astype(np.int64)
+    # Label is heavily correlated with a persistent signal in feature 0.
+    signal = rng.normal(0, 1, n_samples).astype(np.float32)
+    y = (signal > 0).astype(np.int64)
+    tabular[:, :, 0] += signal[:, None] * 3.0
     end_dates = np.arange(n_samples)
 
     train_arrays = FusionArrays(tabular[:80], y[:80], end_dates[:80])
