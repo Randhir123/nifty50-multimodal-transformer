@@ -1,9 +1,27 @@
-"""Build a real-world aligned multimodal artifact and optional ablations.
+"""Build a real-world aligned multimodal artifact from yfinance data and run optional ablations.
 
-This script is intentionally manual because it uses live yfinance downloads.
-It creates a small, reproducible local snapshot under the requested output
-folder and then builds the same aligned multimodal artifact used by fusion
-training and ablations.
+Downloads OHLCV data for a configurable stock universe (default: RELIANCE.NS, TCS.NS, INFY.NS),
+computes tabular features and outperformance labels, builds GAF/MTF image tokens (ImageCNN),
+fetches real news via yfinance for FinBERT text tokens, attaches KG context, and saves an
+aligned multimodal NPZ artifact. With --run-ablations, also trains and evaluates modality
+combinations using walk-forward cross-validation.
+
+Outputs under --output-dir:
+    raw/                                      Per-stock yfinance OHLCV CSVs
+    tabular_samples.csv                       Feature and label rows
+    text_records.csv                          FinBERT-encoded text records
+    real_world_multimodal_samples_gaf.npz     Aligned multimodal artifact
+    ablations/ablation_results.csv            Variant x metric table (if --run-ablations)
+    ablations/ablation_results.json
+
+Usage:
+    python scripts/run_real_world_demo.py \
+        --output-dir data/processed/real_world_demo \
+        --period 9mo --window-size 20 --horizon-days 3 \
+        --run-ablations --epochs 1 --batch-size 4 --device cpu
+
+This script uses live yfinance downloads; results can differ across runs as news and prices
+update. Keep the generated raw/ CSVs to reproduce a specific run's artifact exactly.
 """
 
 from __future__ import annotations

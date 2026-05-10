@@ -1,14 +1,22 @@
 """Compute pairwise modality independence from a multimodal NPZ artifact.
 
-For each pair of modalities, compute the mean absolute Pearson correlation
-across all cross-modal feature pairs (after PCA reduction to max_dim when
-the feature space is larger).  High values (>0.9) = redundant; low values
-(<0.5) = independent.
+For each pair of modalities, computes the mean absolute Pearson correlation across all
+cross-modal feature pairs after PCA reduction to --max-dim (default 50) per modality.
+
+Score interpretation:
+    ~0.04        noise floor (shuffled random pairs); modality carries no independent signal
+    0.08–0.17    independent signal confirmed; modality contributes information not present in others
+    >0.9         redundant; modality is a near-re-encoding of another (e.g., price-derived text)
+
+Reference values from the project artifact:
+    (tabular, text) after real news: 0.170   — well above noise floor
+    (tabular, image) with candlestick ViT: 0.047   — at noise floor (no useful signal)
+    (tabular, image) after GAF/MTF + CNN: 0.082    — independent temporal-shape signal confirmed
 
 Usage:
     python scripts/check_modality_independence.py \
-        --artifact data/processed/real_world_demo_full/real_world_multimodal_samples.npz \
-        --output-csv data/processed/real_world_demo_full/modality_independence.csv
+        --artifact data/processed/real_world_demo/real_world_multimodal_samples_gaf.npz \
+        --output-csv data/processed/real_world_demo/modality_independence.csv
 """
 
 from __future__ import annotations

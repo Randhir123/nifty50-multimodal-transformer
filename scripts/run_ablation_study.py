@@ -1,4 +1,24 @@
-"""Run fusion-model ablations across modality combinations."""
+"""Run FusionTransformer ablations across modality combinations on a multimodal NPZ artifact.
+
+Trains one model per variant per CV fold, records ROC-AUC and classification metrics,
+and writes summary CSVs and JSON to the output directory.
+
+Inputs:
+    --dataset       Path to a multimodal NPZ artifact (must contain tabular_tokens, y,
+                    end_dates; optionally image_tokens, text_tokens, kg_tokens).
+    --output-dir    Directory for ablation_results.csv, ablation_results_folds.csv,
+                    ablation_results.json, and per-fold model checkpoints.
+
+Key flags:
+    --cv-splits N   Number of walk-forward folds (N=1 for a single chronological split).
+    --epochs        Training epochs per fold (20 reproduces the headline results).
+    --model-dim     Shared Transformer dimension (16 in the demo configuration).
+
+Output interpretation:
+    roc_auc_mean is the primary metric. The ordering image > text > KG in the headline
+    results is reliable across runs; individual deltas of ±0.01 are within fold variance
+    and should not be over-interpreted without multi-seed evaluation.
+"""
 
 from __future__ import annotations
 

@@ -1,7 +1,19 @@
 """Run N training epochs on one ablation variant + fold and emit a per-epoch trace CSV.
 
-Used for investigating training dynamics and testing collapse hypotheses.
-No src/ code is modified; hypothesis flags are passed at the command line.
+Useful for diagnosing training dynamics such as probability collapse (output range < 0.01),
+saddle-point lock, and loss curve anomalies. The root cause of the original collapse was
+CLS token pooling in shallow 16-dim encoders; mean pooling (now the default) resolved it.
+
+Outputs one row per epoch to --output-csv with columns: epoch, tr_loss, vl_loss, tr_f1,
+vl_f1, vl_roc_auc, vl_prob_min, vl_prob_mean, vl_prob_max, vl_prob_range.
+
+Usage:
+    python scripts/run_training_trace.py \
+        --artifact data/processed/real_world_demo/real_world_multimodal_samples_gaf.npz \
+        --variant tabular_only --fold 1 --epochs 50 \
+        --output-csv data/processed/trace.csv
+
+Key flags match run_ablation_study.py: --model-dim, --num-heads, --num-layers, --ff-dim.
 """
 
 from __future__ import annotations

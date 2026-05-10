@@ -1,4 +1,22 @@
-"""Build aligned multimodal fusion sample artifacts."""
+"""Build aligned multimodal NPZ artifacts for fusion training.
+
+Produces a multimodal_samples.npz file containing aligned tabular_tokens, image_tokens,
+text_tokens, kg_tokens, y, stock_ids, and end_dates arrays. For quick testing, use
+--toy-output to generate a small deterministic artifact without external data.
+
+Usage — toy artifact (no downloads required):
+    python scripts/build_multimodal_samples.py --toy-output data/processed/multimodal_samples.npz
+
+Usage — real data:
+    python scripts/build_multimodal_samples.py \
+        --output data/processed/multimodal_samples.npz \
+        --tabular-csv data/processed/tabular_samples.csv
+
+The toy artifact uses synthetic random data and is suitable for unit tests and smoke
+checks of the fusion training loop. For production-quality real-data artifacts, prefer
+run_real_world_demo.py which handles the full yfinance download and feature-engineering
+pipeline including GAF/MTF image tokens and FinBERT text tokens.
+"""
 
 from __future__ import annotations
 

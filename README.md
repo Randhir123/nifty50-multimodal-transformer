@@ -14,7 +14,7 @@ A multimodal Transformer that fuses tabular OHLCV features, real financial news 
 | tabular + image (GAF/MTF + CNN) | 0.5242 | +0.028 |
 | All four | 0.5222 | +0.026 |
 
-*3-fold purged walk-forward CV, 20 epochs, 6 stocks, 1 year of data (1,242 samples). Source: [`docs/diagnostics/session7_decision.md`](docs/diagnostics/session7_decision.md).*
+*3-fold purged walk-forward CV, 20 epochs, 6 stocks, 1 year of data (1,242 samples). Full per-variant results in [`docs/findings.md`](docs/findings.md).*
 
 Absolute AUC is modest: the dataset is small (1,242 samples) and spans a single volatile year. The ordering of contributions is coherent — image > text > KG — and the structural independence measurements confirm each modality contributes different information rather than redundant price-derived noise.
 
@@ -26,7 +26,7 @@ Four modalities are projected into a shared embedding space and mixed by Transfo
 
 - **Tabular**: 11 OHLCV-derived technical features over a 20-day rolling window (see [`src/data/features.py`](src/data/features.py)). No global normalization; leakage-free.
 - **Text**: Real financial news fetched from `yfinance` and encoded by FinBERT (768-dim), filtered to `event_date <= prediction_date`. Falls back to deterministic summaries when news is unavailable for a date.
-- **Image**: Gramian Angular Field (GAF) + Markov Transition Field (MTF) images from the 20-day close-price window, encoded by a 3-layer CNN (see [`src/models/image_cnn.py`](src/models/image_cnn.py)). Replaces the earlier candlestick PNG + ViT approach (replaced in session 7 — see "What didn't" below).
+- **Image**: Gramian Angular Field (GAF) + Markov Transition Field (MTF) images from the 20-day close-price window, encoded by a 3-layer CNN (see [`src/models/image_cnn.py`](src/models/image_cnn.py)). Replaces the earlier candlestick PNG + ViT approach (see "What didn't" below).
 - **Knowledge graph**: 4-dim sector, peer, event, and recent-return context aligned by `(stock_id, prediction_date)`.
 
 ```text
@@ -46,15 +46,15 @@ Training uses BCE loss with output bias initialized to `logit(p_positive)`. Defa
 
 ### Leakage safety
 
-Every sample is keyed by `(stock_id, end_date)`. The pipeline enforces: tabular windows contain only rows with `date <= end_date`; text records are filtered to `event_date <= end_date`; GAF/MTF images are generated from the OHLCV series sliced to `date <= end_date` (filenames encode the cutoff date as `{SYMBOL}_{YYYYMMDD}.npy`); KG context carries `as_of_date = end_date`; labels use forward prices at `end_date+1` through `end_date+H`. These invariants are mechanically verified on every push by [`tests/integration/test_no_leakage.py`](tests/integration/test_no_leakage.py). A separate feature audit ([`docs/diagnostics/session6_5_feature_audit.md`](docs/diagnostics/session6_5_feature_audit.md)) confirmed no leakage in any of the 11 tabular features.
+Every sample is keyed by `(stock_id, end_date)`. The pipeline enforces: tabular windows contain only rows with `date <= end_date`; text records are filtered to `event_date <= end_date`; GAF/MTF images are generated from the OHLCV series sliced to `date <= end_date` (filenames encode the cutoff date as `{SYMBOL}_{YYYYMMDD}.npy`); KG context carries `as_of_date = end_date`; labels use forward prices at `end_date+1` through `end_date+H`. These invariants are mechanically verified on every push by [`tests/integration/test_no_leakage.py`](tests/integration/test_no_leakage.py). A separate manual audit confirmed no leakage in any of the 11 tabular features — all features use only data available at or before date D.
 
 ### Cross-validation
 
-Walk-forward expanding-window CV with purged label-window overlap and an optional embargo gap (see [`src/training/cv.py`](src/training/cv.py)). Default: 3 folds, horizon=3 days. Fold boundaries: fold 0 trains on 300 samples and validates on 311 (Sep–Dec 2025); fold 1 trains on 612 and validates on 311 (Dec 2025–Feb 2026); fold 2 trains on 924 and validates on 310 (Feb–May 2026). Source: [`docs/diagnostics/session6_5_logreg_per_fold.md`](docs/diagnostics/session6_5_logreg_per_fold.md).
+Walk-forward expanding-window CV with purged label-window overlap and an optional embargo gap (see [`src/training/cv.py`](src/training/cv.py)). Default: 3 folds, horizon=3 days. Fold boundaries: fold 0 trains on 300 samples and validates on 311 (Sep–Dec 2025); fold 1 trains on 612 and validates on 311 (Dec 2025–Feb 2026); fold 2 trains on 924 and validates on 310 (Feb–May 2026). See [`docs/findings.md`](docs/findings.md) for fold details.
 
 ### Modality independence
 
-Each modality's contribution is verified by distance correlation between mean-pooled embeddings. A score near the noise floor (~0.041) indicates the modality is redundant with others; a higher score indicates genuine complementarity. Before real news ETL, text tokens were price-derived and near-fully correlated with tabular features. After real news: (tabular, text) = 0.170. After GAF/MTF encoding: (tabular, image) = 0.082, up from 0.047 with the candlestick ViT. Source: [`docs/diagnostics/session6_independence_post_news.csv`](docs/diagnostics/session6_independence_post_news.csv), [`docs/diagnostics/session7_independence_post_gaf.csv`](docs/diagnostics/session7_independence_post_gaf.csv). Independence is measured using [`scripts/check_modality_independence.py`](scripts/check_modality_independence.py).
+Each modality's contribution is verified by distance correlation between mean-pooled embeddings. A score near the noise floor (~0.041) indicates the modality is redundant with others; a higher score indicates genuine complementarity. Before real news ETL, text tokens were price-derived and near-fully correlated with tabular features. After real news: (tabular, text) = 0.170. After GAF/MTF encoding: (tabular, image) = 0.082, up from 0.047 with the candlestick ViT. Independence is measured using [`scripts/check_modality_independence.py`](scripts/check_modality_independence.py). Full tables in [`docs/findings.md`](docs/findings.md).
 
 ---
 
@@ -68,7 +68,7 @@ With only 3 folds and a single random seed, the *ordering* of contributions is i
 
 ### Train→val transfer fails on volatility regime shifts
 
-Per-fold logistic regression AUC (source: [`docs/diagnostics/session6_5_logreg_per_fold.md`](docs/diagnostics/session6_5_logreg_per_fold.md)):
+Per-fold logistic regression AUC (full detail in [`docs/findings.md`](docs/findings.md)):
 
 | Fold | Period | Val AUC | Primary stress |
 |---|---|---|---|
@@ -78,11 +78,11 @@ Per-fold logistic regression AUC (source: [`docs/diagnostics/session6_5_logreg_p
 
 Fold 1 carries the meaningful signal: val AUC 0.544 on a logistic regression over 11 mean-pooled features, demonstrating extractable signal exists in stable regimes. Fold 0 fails because the label base rate shifts by 9.8pp (42% → 52% positive), driven by Nifty50 underperforming its constituents during that period. Fold 2 fails because Nifty50 daily volatility in the validation window is 2.36× higher than training — a structural regime change (consistent with global macro turbulence in early 2026) that features trained on a lower-volatility period cannot generalize across.
 
-Feature audit found no leakage. This is a true regime-shift effect. Walk-forward CV surfaced the finding; a single train/test split would have hidden it. Source: [`docs/diagnostics/session6_5_summary.md`](docs/diagnostics/session6_5_summary.md).
+Feature audit found no leakage. This is a true regime-shift effect. Walk-forward CV surfaced the finding; a single train/test split would have hidden it. Full breakdown in [`docs/findings.md`](docs/findings.md).
 
 ### Backtest is honest and negative
 
-Using real 3-day forward returns (corrected in session 6 from a y-proxy that produced disguised classification accuracy), the backtest shows model underperformance on both universes (source: [`docs/diagnostics/session6_backtest_corrected.md`](docs/diagnostics/session6_backtest_corrected.md)):
+Using real 3-day forward returns (replacing an earlier y-proxy that produced disguised classification accuracy), the backtest shows model underperformance on both universes:
 
 | Universe | Model return | Benchmark return |
 |---|---|---|
@@ -95,11 +95,11 @@ This is mechanically consistent with the per-fold diagnostics: fold 2 val AUC 0.
 
 ## What worked, what didn't, what's open
 
-**Worked.** Leakage-safe pipeline with integration test enforcement. Walk-forward CV with purging — the regime-shift finding is what walk-forward CV is for. Trainer collapse fix: CLS token pooling was collapsing to constant output in shallow 16-dim encoders (probability range ≤ 0.006); switching to mean pooling over all tokens broke the saddle point and restored normal gradient flow, with post-fix tabular_only reaching AUC 0.561 over 50 epochs ([`docs/diagnostics/session5_findings.md`](docs/diagnostics/session5_findings.md)). Real news ETL: (tabular, text) independence rose from near-0 to 0.170. GAF/MTF + CNN: strongest single auxiliary modality, independence meaningfully above noise floor. Corrected backtest: the honest negative result replaced the proxy positive result.
+**Worked.** Leakage-safe pipeline with integration test enforcement. Walk-forward CV with purging — the regime-shift finding is what walk-forward CV is for. Trainer collapse fix: CLS token pooling was collapsing to constant output in shallow 16-dim encoders (probability range ≤ 0.006); switching to mean pooling over all tokens broke the saddle point and restored normal gradient flow, with post-fix tabular_only reaching AUC 0.561 over 50 epochs (see [`docs/findings.md`](docs/findings.md)). Real news ETL: (tabular, text) independence rose from near-0 to 0.170. GAF/MTF + CNN: strongest single auxiliary modality, independence meaningfully above noise floor. Corrected backtest: the honest negative result replaced the proxy positive result.
 
-**Didn't.** ViT-from-scratch chart encoder: with 300–900 training samples per fold, the ViT could not learn discriminative spatial features; image tokens were effectively random noise at independence 0.047 ≈ noise floor. Candlestick PNG rendering: adds overhead and asks the model to learn visual feature extraction rather than exploit temporal structure. Both were identified by measurement and replaced with GAF/MTF + CNN in session 7. 16-dim image bottleneck from the ViT pipeline: removed.
+**Didn't.** ViT-from-scratch chart encoder: with 300–900 training samples per fold, the ViT could not learn discriminative spatial features; image tokens were effectively random noise at independence 0.047 ≈ noise floor. Candlestick PNG rendering: adds overhead and asks the model to learn visual feature extraction rather than exploit temporal structure. Both were identified by measurement and replaced with GAF/MTF + CNN. 16-dim image bottleneck from the ViT pipeline: removed.
 
-**Open.** Universe expansion to 15–20 Nifty50 stocks with 3+ years of history was identified in session 6.5 as the highest-leverage next step — it addresses both the regime-shift sensitivity (more data covers multiple volatility periods) and the label non-stationarity (larger peer set reduces sector-rotation noise). Multi-seed evaluation for confidence intervals on modality deltas. Regime-conditional models or volatility-aware training. Longer prediction horizons. Attention attribution to identify which tokens drive predictions.
+**Open.** Universe expansion to 15–20 Nifty50 stocks with 3+ years of history is the highest-leverage next step — it addresses both the regime-shift sensitivity (more data covers multiple volatility periods) and the label non-stationarity (larger peer set reduces sector-rotation noise). Multi-seed evaluation for confidence intervals on modality deltas. Regime-conditional models or volatility-aware training. Longer prediction horizons. Attention attribution to identify which tokens drive predictions.
 
 ---
 
@@ -150,8 +150,6 @@ Generate visualization artifacts:
 python scripts/visualize_real_world_demo.py --demo-dir data/processed/real_world_demo
 ```
 
-For the detailed demo walkthrough and recording checklist, see [`docs/real-world-demo.md`](docs/real-world-demo.md).
-
 Targeted test checks:
 
 ```bash
@@ -173,10 +171,9 @@ pytest tests/integration/test_no_leakage.py
 ├── AGENTS.md                     # contributor workflow instructions
 ├── config/                       # ticker lists
 ├── docs/
-│   ├── diagnostics/              # per-session diagnostic files and source tables
-│   │   └── INDEX.md              # index of all diagnostic files with headline numbers
-│   ├── findings.md               # experimental findings in depth
-│   └── real-world-demo.md        # demo walkthrough and recording checklist
+│   ├── findings.md               # experimental findings and diagnostic narratives
+│   ├── design-notes.md           # key design decisions and their rationale
+│   └── figures/                  # visualization snapshots (embedding projections, ablation charts)
 ├── scripts/                      # runnable demos, ablations, backtest, diagnostics
 ├── src/
 │   ├── data/                     # downloads, features, labels, sample builders

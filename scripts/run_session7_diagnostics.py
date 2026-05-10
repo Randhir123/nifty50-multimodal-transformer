@@ -1,9 +1,22 @@
-"""Session 7 diagnostic suite — GAF/MTF image modality evaluation.
+"""GAF/MTF image modality diagnostic suite.
 
-Tests:
-  1. Modality independence table (reads pre-computed CSV).
-  2. Per-fold logreg AUC for 4 feature combinations.
-  3. Writes docs/diagnostics/session7_logreg.md and session7_decision.md.
+Evaluates the GAF/MTF + CNN image modality against the tabular baseline using
+three diagnostics:
+
+  1. Modality independence table — reads a pre-computed independence CSV to verify
+     (tabular, image) distance correlation is above the noise floor (~0.041).
+  2. Per-fold logreg AUC — runs 3-fold walk-forward logistic regression on 4 feature
+     combinations (tabular_only, tabular_image, tabular_text, all_modalities) to check
+     for linear signal. With a randomly initialized CNN, image adds no linear signal;
+     signal emerges only in the Transformer ablation.
+  3. Writes per-fold AUC table and a summary decision document to the output directory.
+
+Inputs:
+    GAF_ARTIFACT   Path to the GAF/MTF multimodal NPZ artifact (configured in script).
+    INDEPENDENCE_CSV  Pre-computed independence table from check_modality_independence.py.
+
+Note: output paths are hardcoded to the default diagnostics directory. Adjust OUT_DIR
+in the script if running in a different environment.
 """
 
 from __future__ import annotations

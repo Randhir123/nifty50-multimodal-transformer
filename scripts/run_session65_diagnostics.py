@@ -1,10 +1,17 @@
-"""Session 6.5 diagnostic suite.
+"""Train→val transfer failure diagnostic suite.
 
-Runs three tests and writes markdown reports to docs/diagnostics/:
-  - session6_5_logreg_per_fold.md   (Test 1: per-fold logreg AUC)
-  - session6_5_stationarity.md      (Test 2: label + market stationarity)
-  - session6_5_feature_audit.md     (Test 3: tabular feature leakage audit)
-  - session6_5_summary.md           (interpretation)
+Runs three tests to identify why validation AUC varies across walk-forward folds:
+  Test 1: Per-fold logistic regression AUC — isolates which folds have learnable signal.
+  Test 2: Label and market stationarity — checks label base-rate shift and Nifty50
+          volatility ratio (val/train) per fold.
+  Test 3: Tabular feature leakage audit — verifies all 11 features use only data
+          available at or before the prediction date.
+
+Key findings: fold 1 (stable regime) achieves logreg AUC 0.544; fold 2 fails due to
+2.36× Nifty50 volatility regime shift; fold 0 fails due to +9.8pp label base-rate shift.
+Feature audit found no leakage. See docs/findings.md for the full narrative.
+
+Outputs markdown reports to OUT_DIR (configured in script).
 """
 
 from __future__ import annotations
