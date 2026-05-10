@@ -96,6 +96,10 @@ The fold-level logreg results above showed fold 1 succeeds while folds 0 and 2 f
 
 Ranking of failure causes: (1) volatility regime shift in fold 2, (2) label base-rate non-stationarity in fold 0. The model finds signal when both stresses are moderate (fold 1).
 
+### Backtest correction
+
+Session 10a.2 invalidated the earlier top-k backtest implementation. The bug was not model leakage: stock selection used `y_prob`, but the backtest treated each 3-day forward return as if it were a one-day return and compounded overlapping daily rebalances sequentially. With horizon=3, positions opened on consecutive days are concurrent holdings, so the correct calculation first expands each selected trade into daily holding-period returns, averages all active positions per trading day, and then compounds those daily portfolio returns. The corrected backtest also rejects duplicate `(stock_id, end_date)` prediction rows before merging with realized returns. The previously reported 6-stock backtest figures should be regenerated with `scripts/run_backtest.py` after this correction before being cited.
+
 ---
 
 ## What we'd do with more time

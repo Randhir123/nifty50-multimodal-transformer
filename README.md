@@ -82,22 +82,17 @@ Fold 1 carries the meaningful signal: val AUC 0.544 on a logistic regression ove
 
 Feature audit found no leakage. This is a true regime-shift effect. Walk-forward CV surfaced the finding; a single train/test split would have hidden it. Full breakdown in [`docs/findings.md`](docs/findings.md).
 
-### Backtest is honest and negative
+### Backtest status
 
-Using real 3-day forward returns (replacing an earlier y-proxy that produced disguised classification accuracy), the backtest shows model underperformance on both universes:
+Using real 3-day forward returns replaced an earlier `y_true` proxy, but session 10a.2 found a second backtest bug: overlapping 3-day positions were compounded as sequential trades. The corrected backtest now aggregates concurrent holdings into daily portfolio returns before compounding and rejects duplicate `(stock_id, end_date)` prediction rows.
 
-| Universe | Model return | Benchmark return |
-|---|---|---|
-| 3-stock (RELIANCE, TCS, INFY) | −13.9% | +8.6% |
-| 6-stock | −52.1% | −16.1% |
-
-This is mechanically consistent with the per-fold diagnostics: fold 2 val AUC 0.413 means the top-1 selection is anti-predictive in the high-volatility period, which compounds over 49–52 daily rebalances to the −52% figure. The previous proxy result (+13–18% model returns) was an artifact of assigning a fixed +1% return to every positive-labelled day regardless of actual prices.
+The old headline backtest numbers are therefore not cited here. Regenerate them with `scripts/run_backtest.py` or the Colab experiment runner before making any performance claim.
 
 ---
 
 ## What worked, what didn't, what's open
 
-**Worked.** Leakage-safe pipeline with integration test enforcement. Walk-forward CV with purging — the regime-shift finding is what walk-forward CV is for. Trainer collapse fix: CLS token pooling was collapsing to constant output in shallow 16-dim encoders (probability range ≤ 0.006); switching to mean pooling over all tokens broke the saddle point and restored normal gradient flow, with post-fix tabular_only reaching AUC 0.561 over 50 epochs (see [`docs/findings.md`](docs/findings.md)). Real news ETL: (tabular, text) independence rose from near-0 to 0.170. GAF/MTF + CNN: strongest single auxiliary modality, independence meaningfully above noise floor. Corrected backtest: the honest negative result replaced the proxy positive result.
+**Worked.** Leakage-safe pipeline with integration test enforcement. Walk-forward CV with purging — the regime-shift finding is what walk-forward CV is for. Trainer collapse fix: CLS token pooling was collapsing to constant output in shallow 16-dim encoders (probability range ≤ 0.006); switching to mean pooling over all tokens broke the saddle point and restored normal gradient flow, with post-fix tabular_only reaching AUC 0.561 over 50 epochs (see [`docs/findings.md`](docs/findings.md)). Real news ETL: (tabular, text) independence rose from near-0 to 0.170. GAF/MTF + CNN: strongest single auxiliary modality, independence meaningfully above noise floor. Backtest diagnostics now reject both the old label proxy and sequential compounding of overlapping horizon returns.
 
 **Didn't.** ViT-from-scratch chart encoder: with 300–900 training samples per fold, the ViT could not learn discriminative spatial features; image tokens were effectively random noise at independence 0.047 ≈ noise floor. Candlestick PNG rendering: adds overhead and asks the model to learn visual feature extraction rather than exploit temporal structure. Both were identified by measurement and replaced with GAF/MTF + CNN. 16-dim image bottleneck from the ViT pipeline: removed.
 
@@ -194,4 +189,4 @@ pytest tests/integration/test_no_leakage.py
 
 ## Responsible use
 
-This is a coursework project. It is not financial advice, not a trading system, and not a validated investment model. The backtest underperforms the benchmark. The absolute AUC numbers are modest. The diagnostic framework — leakage safety, walk-forward CV, modality independence measurement — is the primary contribution.
+This is a coursework project. It is not financial advice, not a trading system, and not a validated investment model. The absolute AUC numbers are modest, and backtest numbers must be regenerated with the corrected daily aggregation path before being treated as evidence. The diagnostic framework — leakage safety, walk-forward CV, modality independence measurement — is the primary contribution.

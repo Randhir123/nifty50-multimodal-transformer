@@ -16,10 +16,10 @@ Outputs (in --output-dir):
     backtest_curve.png      Cumulative return curve vs benchmark.
 
 Interpretation:
-    The model underperforms the benchmark on the 6-stock 1-year dataset (model −52.1% vs
-    benchmark −16.1% using real forward returns). This is consistent with sub-0.5 validation
-    AUC in the high-volatility fold: anti-predictive top-1 selection compounds over 50 daily
-    rebalances. Use --use-y-proxy only to reproduce the old (incorrect) proxy result.
+    Predictions are selected by y_prob only. With horizon > 1, selected positions overlap,
+    so the script expands each selected trade into daily holding-period returns, averages
+    all active positions per trading day, and compounds those daily portfolio returns.
+    Use --use-y-proxy only to reproduce the old (incorrect) proxy result.
 """
 
 import argparse
@@ -120,6 +120,126 @@ def _max_drawdown(cum_returns: pd.Series) -> float:
     return float(drawdown.min())
 
 
+def validate_no_duplicate_predictions(preds: pd.DataFrame) -> None:
+    """Refuse duplicate model scores for the same stock and rebalance date."""
+    required = {"stock_id", "end_date"}
+    missing = sorted(required - set(preds.columns))
+    if missing:
+        raise ValueError(f"prediction scores missing required columns: {missing}")
+    duplicate_mask = preds.duplicated(["stock_id", "end_date"], keep=False)
+    if duplicate_mask.any():
+        examples = (
+            preds.loc[duplicate_mask, ["stock_id", "end_date"]]
+            .drop_duplicates()
+            .head(10)
+            .to_dict("records")
+        )
+        raise ValueError(
+            "Duplicate prediction rows for (stock_id, end_date). "
+            f"Examples: {examples}"
+        )
+
+
+def select_top_predictions(merged: pd.DataFrame, *, top_k: int) -> pd.DataFrame:
+    """Select top-k rows per rebalance date using only model probabilities."""
+    if top_k <= 0:
+        raise ValueError("top_k must be positive")
+    if "y_prob" not in merged.columns:
+        raise ValueError("prediction scores missing 'y_prob'")
+    selected = (
+        merged.sort_values(["end_date", "y_prob"], ascending=[True, False])
+        .groupby("end_date", group_keys=False)
+        .head(top_k)
+        .copy()
+    )
+    return selected
+
+
+def _add_stock_daily_returns(samples: pd.DataFrame) -> pd.DataFrame:
+    out = samples.copy()
+    out = out.sort_values(["stock_id", "date"]).reset_index(drop=True)
+    out["stock_daily_return"] = out.groupby("stock_id")["close"].pct_change()
+    return out
+
+
+def _load_index_daily_returns(raw_dir: Path) -> pd.DataFrame:
+    nsei_path = raw_dir / "NSEI.csv"
+    if not nsei_path.exists():
+        raise FileNotFoundError(
+            f"Benchmark CSV not found at {nsei_path}. "
+            "Provide --raw-dir pointing to the directory that contains NSEI.csv."
+        )
+    index = pd.read_csv(nsei_path, parse_dates=["date"])
+    index = index.sort_values("date").reset_index(drop=True)
+    index["benchmark_return"] = index["close"].pct_change()
+    return index.loc[:, ["date", "benchmark_return"]]
+
+
+def compute_daily_portfolio_returns(
+    selected: pd.DataFrame,
+    samples: pd.DataFrame,
+    *,
+    horizon_days: int,
+    index_daily_returns: pd.DataFrame | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Convert overlapping H-day trades into equal-weighted daily returns."""
+    if horizon_days <= 0:
+        raise ValueError("horizon_days must be positive")
+
+    sample_returns = _add_stock_daily_returns(samples)
+    by_stock = {
+        stock_id: frame.sort_values("date").reset_index(drop=True)
+        for stock_id, frame in sample_returns.groupby("stock_id")
+    }
+
+    legs: list[dict[str, object]] = []
+    for _, trade in selected.iterrows():
+        stock_id = str(trade["stock_id"])
+        rebalance_date = pd.Timestamp(trade["end_date"]).normalize()
+        stock_frame = by_stock.get(stock_id)
+        if stock_frame is None:
+            continue
+        matches = stock_frame.index[
+            stock_frame["date"].dt.normalize() == rebalance_date
+        ].tolist()
+        if not matches:
+            continue
+        start_idx = matches[0]
+        hold_window = stock_frame.iloc[start_idx + 1 : start_idx + 1 + horizon_days]
+        for _, hold_row in hold_window.dropna(subset=["stock_daily_return"]).iterrows():
+            legs.append(
+                {
+                    "rebalance_date": rebalance_date,
+                    "date": pd.Timestamp(hold_row["date"]).normalize(),
+                    "stock_id": stock_id,
+                    "stock_daily_return": float(hold_row["stock_daily_return"]),
+                    "y_prob": float(trade["y_prob"]),
+                }
+            )
+
+    if not legs:
+        raise ValueError("No realized daily return legs could be built from selected trades.")
+
+    legs_df = pd.DataFrame(legs)
+    results = (
+        legs_df.groupby("date", as_index=False)
+        .agg(
+            portfolio_return=("stock_daily_return", "mean"),
+            active_positions=("stock_id", "count"),
+        )
+        .sort_values("date")
+    )
+
+    if index_daily_returns is not None:
+        index_frame = index_daily_returns.copy()
+        index_frame["date"] = pd.to_datetime(index_frame["date"]).dt.normalize()
+        results = results.merge(index_frame, on="date", how="left")
+    else:
+        results["benchmark_return"] = np.nan
+    results["benchmark_return"] = results["benchmark_return"].fillna(0.0)
+    return results, legs_df
+
+
 def main() -> None:
     parser = build_arg_parser()
     args = parser.parse_args()
@@ -133,6 +253,7 @@ def main() -> None:
         raise ValueError("prediction_scores.csv missing 'stock_id'. Re-run ablations after updating train_fusion.py.")
 
     preds["end_date"] = pd.to_datetime(preds["end_date"]).dt.normalize()
+    validate_no_duplicate_predictions(preds)
 
     print(f"Loading tabular samples from {args.tabular_samples}...")
     samples = pd.read_csv(args.tabular_samples)
@@ -173,6 +294,16 @@ def main() -> None:
     else:
         print(f"Using existing return columns: stock={stock_ret_col}, index={index_ret_col}")
 
+    if not args.use_y_proxy and args.raw_dir is None:
+        raise ValueError(
+            "Corrected daily backtest requires --raw-dir so benchmark daily returns "
+            "can be computed from NSEI.csv."
+        )
+
+    index_daily_returns = None
+    if args.raw_dir is not None:
+        index_daily_returns = _load_index_daily_returns(Path(args.raw_dir))
+
     # Merge predictions with samples
     merged = pd.merge(
         preds,
@@ -187,40 +318,27 @@ def main() -> None:
 
     print(f"Merged {len(merged)} rows covering {merged['end_date'].nunique()} rebalance dates.")
 
-    # Backtest loop
-    dates = sorted(merged["end_date"].unique())
-    portfolio_returns: list[float] = []
-    benchmark_returns: list[float] = []
-    position_counts: list[int] = []
-
-    for d in dates:
-        day_data = merged[merged["end_date"] == d].dropna(subset=[stock_ret_col])
-        if day_data.empty:
-            continue
-        top_k = day_data.nlargest(args.top_k, "y_prob")
-        portfolio_returns.append(float(top_k[stock_ret_col].mean()))
-        benchmark_returns.append(float(day_data[index_ret_col].dropna().iloc[0] if not day_data[index_ret_col].dropna().empty else 0.0))
-        position_counts.append(len(top_k))
-
-    results = pd.DataFrame(
-        {
-            "date": dates[: len(portfolio_returns)],
-            "portfolio_return": portfolio_returns,
-            "benchmark_return": benchmark_returns,
-        }
-    ).set_index("date")
+    selected = select_top_predictions(merged.dropna(subset=[stock_ret_col]), top_k=args.top_k)
+    results, trade_legs = compute_daily_portfolio_returns(
+        selected,
+        samples,
+        horizon_days=args.horizon_days,
+        index_daily_returns=index_daily_returns,
+    )
+    results = results.set_index("date")
 
     results["portfolio_cum"] = (1 + results["portfolio_return"].fillna(0)).cumprod()
     results["benchmark_cum"] = (1 + results["benchmark_return"].fillna(0)).cumprod()
 
     excess = results["portfolio_return"] - results["benchmark_return"]
+    rebalance_dates = int(trade_legs["rebalance_date"].nunique())
 
     metrics = {
         "total_return_model": float(results["portfolio_cum"].iloc[-1] - 1),
         "total_return_benchmark": float(results["benchmark_cum"].iloc[-1] - 1),
         "trading_days": len(results),
-        "rebalance_dates": len(dates),
-        "avg_position_count": float(np.mean(position_counts)),
+        "rebalance_dates": rebalance_dates,
+        "avg_position_count": float(results["active_positions"].mean()),
         "sharpe_ratio": _sharpe(excess),
         "max_drawdown_model": _max_drawdown(results["portfolio_cum"]),
         "note_sharpe": "Risk-free rate = 0, 252 trading days/year assumed",
