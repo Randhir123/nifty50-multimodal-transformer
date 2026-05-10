@@ -26,6 +26,10 @@ data/processed/*
 *.pt
 *.pth
 *.ckpt
+!notebooks/colab/demo_data/model_checkpoint.pt
+
+# Local artifact staging
+drive_artifacts/
 
 # Demo notebook data — committed intentionally
 !notebooks/colab/demo_data/*.pt

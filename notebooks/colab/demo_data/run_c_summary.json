@@ -1,91 +1,237 @@
 {
-  "run_id": "real_world_demo_full_ablations_gaf",
-  "tickers": [
-    "RELIANCE.NS",
-    "TCS.NS",
-    "INFY.NS",
-    "HDFCBANK.NS",
-    "ICICIBANK.NS",
-    "SBIN.NS"
-  ],
-  "benchmark": "^NSEI",
-  "period": "1y",
-  "samples": 1242,
-  "positive_label_rate": 0.4573,
-  "window_size": 20,
-  "horizon_days": 3,
-  "tabular_shape": [
-    1242,
-    20,
-    11
-  ],
-  "image_shape": [
-    1242,
-    16
-  ],
-  "text_shape": [
-    1242,
-    768
-  ],
-  "kg_shape": [
-    1242,
-    4
+  "run_id": "20260510_102537",
+  "runtime_minutes": 14.56,
+  "config": {
+    "tickers": [
+      "RELIANCE.NS",
+      "TCS.NS",
+      "INFY.NS",
+      "HDFCBANK.NS",
+      "ICICIBANK.NS",
+      "SBIN.NS"
+    ],
+    "peer_tickers": [
+      "ADANIENT.NS",
+      "ADANIPORTS.NS",
+      "APOLLOHOSP.NS",
+      "ASIANPAINT.NS",
+      "AXISBANK.NS",
+      "BAJAJ-AUTO.NS",
+      "BAJFINANCE.NS",
+      "BAJAJFINSV.NS",
+      "BEL.NS",
+      "BHARTIARTL.NS",
+      "CIPLA.NS",
+      "COALINDIA.NS",
+      "DRREDDY.NS",
+      "EICHERMOT.NS",
+      "ETERNAL.NS",
+      "GRASIM.NS",
+      "HCLTECH.NS",
+      "HDFCLIFE.NS",
+      "HINDALCO.NS",
+      "HINDUNILVR.NS",
+      "INDIGO.NS",
+      "ITC.NS",
+      "JIOFIN.NS",
+      "JSWSTEEL.NS",
+      "KOTAKBANK.NS",
+      "LT.NS",
+      "M&M.NS",
+      "MARUTI.NS",
+      "MAXHEALTH.NS",
+      "NESTLEIND.NS",
+      "NTPC.NS",
+      "ONGC.NS",
+      "POWERGRID.NS",
+      "SBILIFE.NS",
+      "SHRIRAMFIN.NS",
+      "SUNPHARMA.NS",
+      "TATACONSUM.NS",
+      "TATASTEEL.NS",
+      "TECHM.NS",
+      "TITAN.NS",
+      "TRENT.NS",
+      "ULTRACEMCO.NS",
+      "WIPRO.NS"
+    ],
+    "peer_universe_tickers": [
+      "RELIANCE.NS",
+      "TCS.NS",
+      "INFY.NS",
+      "HDFCBANK.NS",
+      "ICICIBANK.NS",
+      "SBIN.NS",
+      "ADANIENT.NS",
+      "ADANIPORTS.NS",
+      "APOLLOHOSP.NS",
+      "ASIANPAINT.NS",
+      "AXISBANK.NS",
+      "BAJAJ-AUTO.NS",
+      "BAJFINANCE.NS",
+      "BAJAJFINSV.NS",
+      "BEL.NS",
+      "BHARTIARTL.NS",
+      "CIPLA.NS",
+      "COALINDIA.NS",
+      "DRREDDY.NS",
+      "EICHERMOT.NS",
+      "ETERNAL.NS",
+      "GRASIM.NS",
+      "HCLTECH.NS",
+      "HDFCLIFE.NS",
+      "HINDALCO.NS",
+      "HINDUNILVR.NS",
+      "INDIGO.NS",
+      "ITC.NS",
+      "JIOFIN.NS",
+      "JSWSTEEL.NS",
+      "KOTAKBANK.NS",
+      "LT.NS",
+      "M&M.NS",
+      "MARUTI.NS",
+      "MAXHEALTH.NS",
+      "NESTLEIND.NS",
+      "NTPC.NS",
+      "ONGC.NS",
+      "POWERGRID.NS",
+      "SBILIFE.NS",
+      "SHRIRAMFIN.NS",
+      "SUNPHARMA.NS",
+      "TATACONSUM.NS",
+      "TATASTEEL.NS",
+      "TECHM.NS",
+      "TITAN.NS",
+      "TRENT.NS",
+      "ULTRACEMCO.NS",
+      "WIPRO.NS"
+    ],
+    "period": "1y",
+    "start_date": "2025-05-10",
+    "end_date": "2026-05-10",
+    "window_size": 20,
+    "horizon_days": 3,
+    "epochs": 20,
+    "batch_size": 16,
+    "cv_splits": 3,
+    "embargo_days": 3,
+    "output_dir": "/content/drive/MyDrive/nifty50_experiments/20260510_102537",
+    "raw_dir": "/content/drive/MyDrive/nifty50_experiments/20260510_102537/raw",
+    "force_refresh": false,
+    "device": "cuda",
+    "seed": 42,
+    "model_dim": 16,
+    "variants": [
+      "tabular_only",
+      "tabular_kg",
+      "tabular_image",
+      "tabular_text",
+      "tabular_image_text_kg"
+    ]
+  },
+  "artifact": {
+    "samples": 1260,
+    "date_min": "2025-07-03",
+    "date_max": "2026-05-08",
+    "positive_label_rate": 0.4507936507936508,
+    "tabular_shape": [
+      1260,
+      20,
+      11
+    ],
+    "image_shape": [
+      1260,
+      16
+    ],
+    "text_shape": [
+      1260,
+      768
+    ],
+    "kg_shape": [
+      1260,
+      37
+    ]
+  },
+  "modality_independence": [
+    {
+      "modality": "tabular",
+      "tabular": 1.0,
+      "text": 0.1434363168911271,
+      "image": 0.1309960644737709,
+      "kg": 0.1661838884862394
+    },
+    {
+      "modality": "text",
+      "tabular": 0.1434363168911271,
+      "text": 1.0,
+      "image": 0.0857635832258061,
+      "kg": 0.1729979514610575
+    },
+    {
+      "modality": "image",
+      "tabular": 0.1309960644737709,
+      "text": 0.0857635832258061,
+      "image": 1.0,
+      "kg": 0.0575214873023402
+    },
+    {
+      "modality": "kg",
+      "tabular": 0.1661838884862394,
+      "text": 0.1729979514610576,
+      "image": 0.0575214873023402,
+      "kg": 1.0
+    }
   ],
   "ablation_results": [
     {
       "variant": "tabular_only",
-      "mean_auc": 0.4963,
-      "delta_vs_tabular": 0.0
+      "roc_auc_mean": 0.4775148130488182,
+      "roc_auc_std": 0.0721898520287623,
+      "accuracy_mean": 0.5767195767195767,
+      "f1_mean": 0.4169600938967137
     },
     {
       "variant": "tabular_kg",
-      "mean_auc": 0.4974,
-      "delta_vs_tabular": 0.0011
-    },
-    {
-      "variant": "tabular_text",
-      "mean_auc": 0.5104,
-      "delta_vs_tabular": 0.0141
+      "roc_auc_mean": 0.4910729725640272,
+      "roc_auc_std": 0.0703741028459984,
+      "accuracy_mean": 0.5576719576719578,
+      "f1_mean": 0.3349358974358974
     },
     {
       "variant": "tabular_image",
-      "mean_auc": 0.5242,
-      "delta_vs_tabular": 0.0279
+      "roc_auc_mean": 0.5182648984565122,
+      "roc_auc_std": 0.0479282708461861,
+      "accuracy_mean": 0.5523809523809523,
+      "f1_mean": 0.2543238993710692
+    },
+    {
+      "variant": "tabular_text",
+      "roc_auc_mean": 0.5190439793601304,
+      "roc_auc_std": 0.0916660458618813,
+      "accuracy_mean": 0.5915343915343915,
+      "f1_mean": 0.409957627118644
     },
     {
       "variant": "tabular_image_text_kg",
-      "mean_auc": 0.5222,
-      "delta_vs_tabular": 0.0259
+      "roc_auc_mean": 0.4961719600594859,
+      "roc_auc_std": 0.0943911606026898,
+      "accuracy_mean": 0.5608465608465609,
+      "f1_mean": 0.4101903387617673
     }
   ],
-  "modality_independence": {
-    "tabular_text": 0.17,
-    "tabular_image": 0.047,
-    "tabular_kg": 0.138,
-    "text_image": 0.107,
-    "text_kg": 0.197,
-    "image_kg": 0.075
+  "backtest": {
+    "total_return_model": 0.05877372046592666,
+    "total_return_benchmark": -0.04556210891621737,
+    "trading_days": 157,
+    "rebalance_dates": 155,
+    "avg_position_count": 2.961783439490446,
+    "sharpe_ratio": 0.9371484352046253,
+    "max_drawdown_model": -0.20231309214488802,
+    "note_sharpe": "Risk-free rate = 0, 252 trading days/year assumed",
+    "return_source": "real_forward_returns"
   },
-  "fold_aucs": {
-    "fold_0_period": "Sep-Dec 2025",
-    "fold_0_val_auc": 0.527,
-    "fold_1_period": "Dec 2025 - Feb 2026",
-    "fold_1_val_auc": 0.591,
-    "fold_2_period": "Feb-May 2026",
-    "fold_2_val_auc": 0.448
-  },
-  "backtest_6stock": {
-    "model_total_return": -0.521,
-    "benchmark_total_return": -0.161,
-    "trading_days": 49,
-    "sharpe_ratio": -6.75,
-    "max_drawdown": -0.549
-  },
-  "backtest_3stock": {
-    "model_total_return": -0.139,
-    "benchmark_total_return": 0.086,
-    "trading_days": 34,
-    "sharpe_ratio": -4.14,
-    "max_drawdown": -0.184
+  "notes": {
+    "checkpoint": "Full-modality fold-2 checkpoint used for demo inference.",
+    "attention": "The production model uses mean pooling and does not expose attention weights; demo interpretability uses ablation-derived modality contribution."
   }
 }
