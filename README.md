@@ -40,6 +40,8 @@ The fusion model ([`src/models/fusion.py`](src/models/fusion.py)) projects each 
 
 Training uses BCE loss with output bias initialized to `logit(p_positive)`. Default: 3-fold purged walk-forward CV, 20 epochs, CPU-compatible.
 
+For the full implementation-level architecture, see [`docs/architecture.md`](docs/architecture.md).
+
 ---
 
 ## Methodology
@@ -171,6 +173,7 @@ pytest tests/integration/test_no_leakage.py
 ├── AGENTS.md                     # contributor workflow instructions
 ├── config/                       # ticker lists
 ├── docs/
+│   ├── architecture.md           # current implementation architecture
 │   ├── findings.md               # experimental findings and diagnostic narratives
 │   ├── design-notes.md           # key design decisions and their rationale
 │   └── figures/                  # visualization snapshots (embedding projections, ablation charts)
