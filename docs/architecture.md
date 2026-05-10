@@ -61,9 +61,9 @@ Every modality row must refer to the same stock and prediction date.
   -> y
 ```
 
-The high-level diagram below is the original end-to-end architecture diagram kept in the repository's `images/` folder.
+The current end-to-end architecture is shown below. The image branch uses GAF/MTF time-series images and `ImageCNN`; it does not use candlestick PNGs as model input.
 
-![End-to-end multimodal architecture](../images/7a043901-c6e9-4b4f-8028-7221d6161be9.png)
+![Nifty50 Multimodal Transformer end-to-end architecture](../images/a_clean_infographic_architectural_diagram_on_a_w_1_batch_1.png)
 
 ---
 
@@ -221,6 +221,10 @@ The exact KG width can change if event types change, so the generated NPZ shape 
 ## 5. FusionTransformer architecture
 
 The central model is `FusionTransformer` in `src/models/fusion.py`.
+
+The detailed internal model flow is shown below.
+
+![FusionTransformer detailed internal architecture](../images/a_clean_technical_diagram_infographic_on_a_white_2_batch_2.png)
 
 ### 5.1 Configuration
 
