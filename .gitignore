@@ -27,6 +27,12 @@ data/processed/*
 *.pth
 *.ckpt
 
+# Demo notebook data — committed intentionally
+!notebooks/colab/demo_data/*.pt
+!notebooks/colab/demo_data/*.npz
+!notebooks/colab/demo_data/*.csv
+!notebooks/colab/demo_data/*.json
+
 # IDE
 .vscode/
 .idea/

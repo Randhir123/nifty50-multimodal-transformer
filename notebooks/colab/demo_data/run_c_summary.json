@@ -1,0 +1,91 @@
+{
+  "run_id": "real_world_demo_full_ablations_gaf",
+  "tickers": [
+    "RELIANCE.NS",
+    "TCS.NS",
+    "INFY.NS",
+    "HDFCBANK.NS",
+    "ICICIBANK.NS",
+    "SBIN.NS"
+  ],
+  "benchmark": "^NSEI",
+  "period": "1y",
+  "samples": 1242,
+  "positive_label_rate": 0.4573,
+  "window_size": 20,
+  "horizon_days": 3,
+  "tabular_shape": [
+    1242,
+    20,
+    11
+  ],
+  "image_shape": [
+    1242,
+    16
+  ],
+  "text_shape": [
+    1242,
+    768
+  ],
+  "kg_shape": [
+    1242,
+    4
+  ],
+  "ablation_results": [
+    {
+      "variant": "tabular_only",
+      "mean_auc": 0.4963,
+      "delta_vs_tabular": 0.0
+    },
+    {
+      "variant": "tabular_kg",
+      "mean_auc": 0.4974,
+      "delta_vs_tabular": 0.0011
+    },
+    {
+      "variant": "tabular_text",
+      "mean_auc": 0.5104,
+      "delta_vs_tabular": 0.0141
+    },
+    {
+      "variant": "tabular_image",
+      "mean_auc": 0.5242,
+      "delta_vs_tabular": 0.0279
+    },
+    {
+      "variant": "tabular_image_text_kg",
+      "mean_auc": 0.5222,
+      "delta_vs_tabular": 0.0259
+    }
+  ],
+  "modality_independence": {
+    "tabular_text": 0.17,
+    "tabular_image": 0.047,
+    "tabular_kg": 0.138,
+    "text_image": 0.107,
+    "text_kg": 0.197,
+    "image_kg": 0.075
+  },
+  "fold_aucs": {
+    "fold_0_period": "Sep-Dec 2025",
+    "fold_0_val_auc": 0.527,
+    "fold_1_period": "Dec 2025 - Feb 2026",
+    "fold_1_val_auc": 0.591,
+    "fold_2_period": "Feb-May 2026",
+    "fold_2_val_auc": 0.448
+  },
+  "backtest_6stock": {
+    "model_total_return": -0.521,
+    "benchmark_total_return": -0.161,
+    "trading_days": 49,
+    "sharpe_ratio": -6.75,
+    "max_drawdown": -0.549
+  },
+  "backtest_3stock": {
+    "model_total_return": -0.139,
+    "benchmark_total_return": 0.086,
+    "trading_days": 34,
+    "sharpe_ratio": -4.14,
+    "max_drawdown": -0.184
+  }
+}
