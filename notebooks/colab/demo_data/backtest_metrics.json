@@ -1,0 +1,11 @@
+{
+  "total_return_model": 0.05877372046592666,
+  "total_return_benchmark": -0.04556210891621737,
+  "trading_days": 157,
+  "rebalance_dates": 155,
+  "avg_position_count": 2.961783439490446,
+  "sharpe_ratio": 0.9371484352046253,
+  "max_drawdown_model": -0.20231309214488802,
+  "note_sharpe": "Risk-free rate = 0, 252 trading days/year assumed",
+  "return_source": "real_forward_returns"
+}

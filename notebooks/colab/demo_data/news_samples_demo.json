@@ -1,194 +1,170 @@
-{
-  "RELIANCE.NS": [
-    {
-      "event_date": "2026-05-08",
-      "source_type": "market_summary",
-      "title": "RELIANCE.NS negative daily market summary",
-      "body_text": "As of 2026-05-08, RELIANCE.NS had a negative one-day return of -0.0007."
-    },
-    {
-      "event_date": "2026-04-29",
-      "source_type": "market_summary",
-      "title": "RELIANCE.NS positive daily market summary",
-      "body_text": "As of 2026-04-29, RELIANCE.NS had a positive one-day return of 0.0259."
-    },
-    {
-      "event_date": "2026-04-22",
-      "source_type": "market_summary",
-      "title": "RELIANCE.NS positive daily market summary",
-      "body_text": "As of 2026-04-22, RELIANCE.NS had a positive one-day return of 0.0065."
-    },
-    {
-      "event_date": "2026-04-15",
-      "source_type": "market_summary",
-      "title": "RELIANCE.NS positive daily market summary",
-      "body_text": "As of 2026-04-15, RELIANCE.NS had a positive one-day return of 0.0218."
-    },
-    {
-      "event_date": "2026-04-07",
-      "source_type": "market_summary",
-      "title": "RELIANCE.NS negative daily market summary",
-      "body_text": "As of 2026-04-07, RELIANCE.NS had a negative one-day return of -0.0001."
-    }
-  ],
-  "TCS.NS": [
-    {
-      "event_date": "2026-05-08",
-      "source_type": "market_summary",
-      "title": "TCS.NS negative daily market summary",
-      "body_text": "As of 2026-05-08, TCS.NS had a negative one-day return of -0.0029."
-    },
-    {
-      "event_date": "2026-04-29",
-      "source_type": "market_summary",
-      "title": "TCS.NS positive daily market summary",
-      "body_text": "As of 2026-04-29, TCS.NS had a positive one-day return of 0.0122."
-    },
-    {
-      "event_date": "2026-04-22",
-      "source_type": "market_summary",
-      "title": "TCS.NS negative daily market summary",
-      "body_text": "As of 2026-04-22, TCS.NS had a negative one-day return of -0.0280."
-    },
-    {
-      "event_date": "2026-04-15",
-      "source_type": "market_summary",
-      "title": "TCS.NS positive daily market summary",
-      "body_text": "As of 2026-04-15, TCS.NS had a positive one-day return of 0.0327."
-    },
-    {
-      "event_date": "2026-04-07",
-      "source_type": "market_summary",
-      "title": "TCS.NS positive daily market summary",
-      "body_text": "As of 2026-04-07, TCS.NS had a positive one-day return of 0.0263."
-    }
-  ],
-  "INFY.NS": [
-    {
-      "event_date": "2026-05-08",
-      "source_type": "market_summary",
-      "title": "INFY.NS positive daily market summary",
-      "body_text": "As of 2026-05-08, INFY.NS had a positive one-day return of 0.0141."
-    },
-    {
-      "event_date": "2026-04-29",
-      "source_type": "market_summary",
-      "title": "INFY.NS positive daily market summary",
-      "body_text": "As of 2026-04-29, INFY.NS had a positive one-day return of 0.0133."
-    },
-    {
-      "event_date": "2026-04-22",
-      "source_type": "market_summary",
-      "title": "INFY.NS negative daily market summary",
-      "body_text": "As of 2026-04-22, INFY.NS had a negative one-day return of -0.0346."
-    },
-    {
-      "event_date": "2026-04-15",
-      "source_type": "market_summary",
-      "title": "INFY.NS positive daily market summary",
-      "body_text": "As of 2026-04-15, INFY.NS had a positive one-day return of 0.0221."
-    },
-    {
-      "event_date": "2026-04-07",
-      "source_type": "market_summary",
-      "title": "INFY.NS positive daily market summary",
-      "body_text": "As of 2026-04-07, INFY.NS had a positive one-day return of 0.0251."
-    }
-  ],
-  "HDFCBANK.NS": [
-    {
-      "event_date": "2026-05-08",
-      "source_type": "market_summary",
-      "title": "HDFCBANK.NS negative daily market summary",
-      "body_text": "As of 2026-05-08, HDFCBANK.NS had a negative one-day return of -0.0193."
-    },
-    {
-      "event_date": "2026-04-29",
-      "source_type": "market_summary",
-      "title": "HDFCBANK.NS negative daily market summary",
-      "body_text": "As of 2026-04-29, HDFCBANK.NS had a negative one-day return of -0.0045."
-    },
-    {
-      "event_date": "2026-04-22",
-      "source_type": "market_summary",
-      "title": "HDFCBANK.NS negative daily market summary",
-      "body_text": "As of 2026-04-22, HDFCBANK.NS had a negative one-day return of -0.0147."
-    },
-    {
-      "event_date": "2026-04-15",
-      "source_type": "market_summary",
-      "title": "HDFCBANK.NS positive daily market summary",
-      "body_text": "As of 2026-04-15, HDFCBANK.NS had a positive one-day return of 0.0189."
-    },
-    {
-      "event_date": "2026-04-07",
-      "source_type": "market_summary",
-      "title": "HDFCBANK.NS positive daily market summary",
-      "body_text": "As of 2026-04-07, HDFCBANK.NS had a positive one-day return of 0.0013."
-    }
-  ],
-  "ICICIBANK.NS": [
-    {
-      "event_date": "2026-05-08",
-      "source_type": "market_summary",
-      "title": "ICICIBANK.NS negative daily market summary",
-      "body_text": "As of 2026-05-08, ICICIBANK.NS had a negative one-day return of -0.0112."
-    },
-    {
-      "event_date": "2026-04-29",
-      "source_type": "market_summary",
-      "title": "ICICIBANK.NS negative daily market summary",
-      "body_text": "As of 2026-04-29, ICICIBANK.NS had a negative one-day return of -0.0086."
-    },
-    {
-      "event_date": "2026-04-22",
-      "source_type": "market_summary",
-      "title": "ICICIBANK.NS negative daily market summary",
-      "body_text": "As of 2026-04-22, ICICIBANK.NS had a negative one-day return of -0.0151."
-    },
-    {
-      "event_date": "2026-04-15",
-      "source_type": "market_summary",
-      "title": "ICICIBANK.NS negative daily market summary",
-      "body_text": "As of 2026-04-15, ICICIBANK.NS had a negative one-day return of -0.0022."
-    },
-    {
-      "event_date": "2026-04-07",
-      "source_type": "market_summary",
-      "title": "ICICIBANK.NS positive daily market summary",
-      "body_text": "As of 2026-04-07, ICICIBANK.NS had a positive one-day return of 0.0114."
-    }
-  ],
-  "SBIN.NS": [
-    {
-      "event_date": "2026-05-08",
-      "source_type": "market_summary",
-      "title": "SBIN.NS negative daily market summary",
-      "body_text": "As of 2026-05-08, SBIN.NS had a negative one-day return of -0.0689."
-    },
-    {
-      "event_date": "2026-04-29",
-      "source_type": "market_summary",
-      "title": "SBIN.NS negative daily market summary",
-      "body_text": "As of 2026-04-29, SBIN.NS had a negative one-day return of -0.0040."
-    },
-    {
-      "event_date": "2026-04-22",
-      "source_type": "market_summary",
-      "title": "SBIN.NS negative daily market summary",
-      "body_text": "As of 2026-04-22, SBIN.NS had a negative one-day return of -0.0077."
-    },
-    {
-      "event_date": "2026-04-15",
-      "source_type": "market_summary",
-      "title": "SBIN.NS positive daily market summary",
-      "body_text": "As of 2026-04-15, SBIN.NS had a positive one-day return of 0.0074."
-    },
-    {
-      "event_date": "2026-04-07",
-      "source_type": "market_summary",
-      "title": "SBIN.NS negative daily market summary",
-      "body_text": "As of 2026-04-07, SBIN.NS had a negative one-day return of -0.0023."
-    }
-  ]
-}
+[
+  {
+    "stock_id":"HDFCBANK.NS",
+    "event_date":"2025-06-06T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"HDFCBANK.NS positive daily market summary",
+    "body_text":"As of 2025-06-06, HDFCBANK.NS had a positive one-day return of 0.0148."
+  },
+  {
+    "stock_id":"HDFCBANK.NS",
+    "event_date":"2025-06-13T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"HDFCBANK.NS negative daily market summary",
+    "body_text":"As of 2025-06-13, HDFCBANK.NS had a negative one-day return of -0.0134."
+  },
+  {
+    "stock_id":"HDFCBANK.NS",
+    "event_date":"2025-06-20T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"HDFCBANK.NS positive daily market summary",
+    "body_text":"As of 2025-06-20, HDFCBANK.NS had a positive one-day return of 0.0151."
+  },
+  {
+    "stock_id":"HDFCBANK.NS",
+    "event_date":"2025-06-27T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"HDFCBANK.NS negative daily market summary",
+    "body_text":"As of 2025-06-27, HDFCBANK.NS had a negative one-day return of -0.0034."
+  },
+  {
+    "stock_id":"HDFCBANK.NS",
+    "event_date":"2025-07-04T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"HDFCBANK.NS positive daily market summary",
+    "body_text":"As of 2025-07-04, HDFCBANK.NS had a positive one-day return of 0.0011."
+  },
+  {
+    "stock_id":"HDFCBANK.NS",
+    "event_date":"2025-07-11T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"HDFCBANK.NS negative daily market summary",
+    "body_text":"As of 2025-07-11, HDFCBANK.NS had a negative one-day return of -0.0113."
+  },
+  {
+    "stock_id":"HDFCBANK.NS",
+    "event_date":"2025-07-18T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"HDFCBANK.NS negative daily market summary",
+    "body_text":"As of 2025-07-18, HDFCBANK.NS had a negative one-day return of -0.0150."
+  },
+  {
+    "stock_id":"HDFCBANK.NS",
+    "event_date":"2025-07-25T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"HDFCBANK.NS negative daily market summary",
+    "body_text":"As of 2025-07-25, HDFCBANK.NS had a negative one-day return of -0.0048."
+  },
+  {
+    "stock_id":"RELIANCE.NS",
+    "event_date":"2025-06-06T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"RELIANCE.NS positive daily market summary",
+    "body_text":"As of 2025-06-06, RELIANCE.NS had a positive one-day return of 0.0008."
+  },
+  {
+    "stock_id":"RELIANCE.NS",
+    "event_date":"2025-06-13T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"RELIANCE.NS negative daily market summary",
+    "body_text":"As of 2025-06-13, RELIANCE.NS had a negative one-day return of -0.0095."
+  },
+  {
+    "stock_id":"RELIANCE.NS",
+    "event_date":"2025-06-20T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"RELIANCE.NS positive daily market summary",
+    "body_text":"As of 2025-06-20, RELIANCE.NS had a positive one-day return of 0.0227."
+  },
+  {
+    "stock_id":"RELIANCE.NS",
+    "event_date":"2025-06-27T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"RELIANCE.NS positive daily market summary",
+    "body_text":"As of 2025-06-27, RELIANCE.NS had a positive one-day return of 0.0134."
+  },
+  {
+    "stock_id":"RELIANCE.NS",
+    "event_date":"2025-07-04T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"RELIANCE.NS positive daily market summary",
+    "body_text":"As of 2025-07-04, RELIANCE.NS had a positive one-day return of 0.0062."
+  },
+  {
+    "stock_id":"RELIANCE.NS",
+    "event_date":"2025-07-11T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"RELIANCE.NS negative daily market summary",
+    "body_text":"As of 2025-07-11, RELIANCE.NS had a negative one-day return of -0.0146."
+  },
+  {
+    "stock_id":"RELIANCE.NS",
+    "event_date":"2025-07-18T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"RELIANCE.NS negative daily market summary",
+    "body_text":"As of 2025-07-18, RELIANCE.NS had a negative one-day return of -0.0003."
+  },
+  {
+    "stock_id":"RELIANCE.NS",
+    "event_date":"2025-07-25T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"RELIANCE.NS negative daily market summary",
+    "body_text":"As of 2025-07-25, RELIANCE.NS had a negative one-day return of -0.0080."
+  },
+  {
+    "stock_id":"TCS.NS",
+    "event_date":"2025-06-06T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"TCS.NS positive daily market summary",
+    "body_text":"As of 2025-06-06, TCS.NS had a positive one-day return of 0.0039."
+  },
+  {
+    "stock_id":"TCS.NS",
+    "event_date":"2025-06-13T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"TCS.NS positive daily market summary",
+    "body_text":"As of 2025-06-13, TCS.NS had a positive one-day return of 0.0033."
+  },
+  {
+    "stock_id":"TCS.NS",
+    "event_date":"2025-06-20T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"TCS.NS positive daily market summary",
+    "body_text":"As of 2025-06-20, TCS.NS had a positive one-day return of 0.0034."
+  },
+  {
+    "stock_id":"TCS.NS",
+    "event_date":"2025-06-27T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"TCS.NS negative daily market summary",
+    "body_text":"As of 2025-06-27, TCS.NS had a negative one-day return of -0.0002."
+  },
+  {
+    "stock_id":"TCS.NS",
+    "event_date":"2025-07-04T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"TCS.NS positive daily market summary",
+    "body_text":"As of 2025-07-04, TCS.NS had a positive one-day return of 0.0056."
+  },
+  {
+    "stock_id":"TCS.NS",
+    "event_date":"2025-07-11T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"TCS.NS negative daily market summary",
+    "body_text":"As of 2025-07-11, TCS.NS had a negative one-day return of -0.0349."
+  },
+  {
+    "stock_id":"TCS.NS",
+    "event_date":"2025-07-18T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"TCS.NS negative daily market summary",
+    "body_text":"As of 2025-07-18, TCS.NS had a negative one-day return of -0.0060."
+  },
+  {
+    "stock_id":"TCS.NS",
+    "event_date":"2025-07-25T00:00:00.000",
+    "source_type":"market_summary",
+    "title":"TCS.NS negative daily market summary",
+    "body_text":"As of 2025-07-25, TCS.NS had a negative one-day return of -0.0039."
+  }
+]

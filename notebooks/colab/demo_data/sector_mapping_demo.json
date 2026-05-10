@@ -1,15 +1,5 @@
 {
-  "tickers": {
-    "RELIANCE.NS": "energy",
-    "TCS.NS": "it",
-    "INFY.NS": "it",
-    "HDFCBANK.NS": "banking",
-    "ICICIBANK.NS": "banking",
-    "SBIN.NS": "banking"
-  },
-  "descriptions": {
-    "energy": "Petroleum, power generation, and natural gas",
-    "it": "Software services and technology",
-    "banking": "Banks, NBFCs, and financial services"
-  }
+  "HDFCBANK.NS": "banking",
+  "TCS.NS": "it",
+  "RELIANCE.NS": "energy"
 }

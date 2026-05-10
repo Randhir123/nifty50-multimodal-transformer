@@ -1,121 +1,107 @@
 # Experimental Findings
 
-This document supplements the README with experimental detail. It is self-contained — all numbers are inline and do not depend on external files.
+This document provides the experimental detail behind the README. The canonical headline run is Run C, run ID `20260510_102537`: 6 training stocks, a 49-stock Nifty50 peer universe, 1,260 samples, 45.1% positive label rate, 20 trading-day windows, 3 trading-day horizon, 3-fold purged walk-forward CV, 3-day embargo, 20 epochs, batch size 16, seed 42, GPU.
+
+The goal of this document is not to claim investment-grade performance. It records what changed, what survived robustness checks, and what did not.
 
 ---
 
-## Modality independence over time
+## 1. Modality independence over time
 
-Modality independence is measured as mean absolute Pearson correlation between mean-pooled PCA-reduced embeddings across modality pairs. A score near the noise floor (~0.041) means the modality carries no information independent of the others; a higher score means it is genuinely complementary. The script [`scripts/check_modality_independence.py`](../scripts/check_modality_independence.py) computes these tables from any multimodal NPZ artifact.
+Modality independence is measured with distance correlation between mean-pooled modality embeddings. A value near the shuffled baseline means a modality is close to redundant/noisy relative to another modality. A higher value means it carries information that is not trivially present in the other representation.
 
-The pipeline went through two independence-raising changes:
+| Pair | Pre-news / early pipeline | Post-news / Run A-style pipeline | Run C: post-GAF/MTF + 49-peer KG |
+|---|---:|---:|---:|
+| `(tabular, text)` | `> 0.9` estimated | `0.143` | `0.143` |
+| `(tabular, image)` | `~0.13` estimated | `0.131` | `0.131` |
+| `(tabular, kg)` | `0.135` with 4-feature KG | `0.130` with 4-feature KG | `0.166` with 37-feature KG and 49 peers |
+| `(text, kg)` | not measured | not used as headline | `0.173` |
+| shuffled baseline | `0.041` | `0.041` | `0.041` |
 
-**Before real news ETL.** Text tokens were generated from OHLCV price statistics (deterministic summaries derived from the same tabular features). The result was near-total dependence: text and image embeddings carried minimal signal beyond what the tabular modality already contained. The model was also predicting all-positive (F1 locking to recall) and validation AUC stalled below 0.50 for all variants.
+The text branch improved conceptually when deterministic price-derived summaries were replaced with real news records encoded by FinBERT. That change prevents the text channel from being a simple restatement of the tabular features. In Run C, `(tabular, text)=0.143`, comfortably above the shuffled baseline of `0.041`.
 
-**After real news ETL.** Text tokens encode real `yfinance` news headlines with FinBERT (768-dim).
+The image branch improved after the project moved away from rendered candlestick/ViT-style image input and toward GAF/MTF time-series images encoded with a compact CNN. In Run C, `(tabular, image)=0.131`, again above the shuffled baseline. This supports the idea that image tokens preserve temporal-shape structure that 20-day scalar rolling statistics do not fully capture.
 
-| | tabular | text | image | kg |
-|---|---|---|---|---|
-| tabular | 1.000 | 0.170 | 0.047 | 0.138 |
-| text | 0.170 | 1.000 | 0.107 | 0.197 |
-| image | 0.047 | 0.107 | 1.000 | 0.075 |
-| kg | 0.138 | 0.197 | 0.075 | 1.000 |
-
-The (tabular, text) score dropped to 0.170 — text is now genuinely independent of price features. The (tabular, image) score of 0.047 is essentially at the noise floor: the candlestick ViT image tokens were near-random noise.
-
-**After GAF/MTF + CNN.** Image tokens encode GAF + MTF representations of the close-price series, encoded by a 3-layer CNN.
-
-| | tabular | text | image | kg |
-|---|---|---|---|---|
-| tabular | 1.000 | 0.170 | **0.082** | 0.138 |
-| text | 0.170 | 1.000 | 0.078 | 0.197 |
-| image | **0.082** | 0.078 | 1.000 | 0.064 |
-| kg | 0.138 | 0.197 | 0.064 | 1.000 |
-
-(tabular, image) rose from 0.047 to 0.082 — a ~75% increase from the noise floor. The image modality now carries temporal-shape information (angular correlations across the 20-day window; quantile-bin transition probabilities) that scalar rolling statistics explicitly discard by collapsing windows to single numbers. Text independence (0.170) is unchanged, as expected — only the image pipeline changed.
+The KG branch shows the clearest structural change. The original compact KG had only a few sector/peer/event fields and showed `(tabular, kg)` around `0.130–0.135`. The 37-feature KG with a full 49-stock peer universe raises `(tabular, kg)` to `0.166`. That does not make KG the strongest predictive modality, but it does show that the wider relational vector carries information that is structurally distinct from tabular features.
 
 ---
 
-## Per-fold ablation results
+## 2. The KG iteration
 
-### Logistic regression — 3-fold walk-forward CV
+The KG modality went through several configurations. This sequence is important because it explains why the final KG claim is deliberately modest.
 
-Logreg on mean-pooled tabular tokens is the linear-signal baseline. It measures whether any modality combination carries linearly separable signal on its own, without the Transformer's capacity to mix modality tokens.
+| Configuration | Δ ROC-AUC vs `tabular_only` |
+|---|---:|
+| 4-feature KG, 6-stock peer universe, initial run | `−0.003` |
+| 4-feature KG, 6-stock peer universe, after trainer fix | `+0.001` |
+| 37-feature KG, 6-stock peer universe, Run A | `+0.045` |
+| 37-feature KG, 14-stock peer universe equal to training universe, Run B | `−0.028` |
+| 37-feature KG, 49-stock peer universe + 6-stock training universe, Run C | `+0.014` |
 
-| Variant | Fold 0 | Fold 1 | Fold 2 | Mean AUC |
-|---|---|---|---|---|
-| tabular_only | 0.443 | 0.544 | 0.413 | 0.467 |
-| tabular_image (GAF/MTF) | 0.437 | 0.526 | 0.437 | 0.466 |
-| tabular_text | 0.467 | 0.511 | 0.416 | 0.465 |
-| all_modalities | 0.469 | 0.508 | 0.415 | 0.464 |
+The `+0.045` Run A result was attractive but did not survive the peer-universe robustness check. It was produced by the upgraded 37-feature KG while still computing relational features against a small 6-stock peer set. In such a small universe, sector ranks, peer spreads, and correlation-like features can look predictive by chance on a small validation sample.
 
-The logreg mean AUC is near-chance for all variants. This does not mean there is no signal — it means the signal is non-linear or requires the Transformer's capacity to mix modality tokens. Fold 1 shows that signal does exist at the logreg level (0.544 on tabular_only) when the validation period is stable. Folds 0 and 2 collapse due to regime effects explained in the stationarity section below.
+Run C is the more conservative estimate. It keeps the supervised training universe small at 6 stocks but computes KG features against 49 Nifty50 peers. The result is a smaller but more defensible `+0.014` ROC-AUC delta. The independence result `(tabular, kg)=0.166` versus shuffled baseline `0.041` says the KG vector is structurally meaningful. The ablation delta says the predictive value is real but small at this scale.
 
-Note: with a randomly initialized CNN, GAF/MTF image tokens carry no linear signal (tabular_image delta = −0.001 vs tabular_only). This is expected: a random projection destroys the temporal structure encoded by GAF/MTF. The signal emerges only when the CNN is trained end-to-end in the Transformer ablation.
-
-### Transformer ablation — 3-fold walk-forward CV, 20 epochs
-
-| Variant | Mean AUC | Std | Δ vs tabular_only |
-|---|---|---|---|
-| tabular_only | 0.4963 | 0.085 | — |
-| tabular_kg | 0.4974 | 0.063 | +0.001 |
-| tabular_text | 0.5104 | 0.074 | +0.014 |
-| tabular_text_kg | 0.4974 | 0.084 | +0.001 |
-| tabular_image | **0.5242** | 0.067 | **+0.028** |
-| tabular_image_text_kg | 0.5222 | 0.058 | +0.026 |
-
-`tabular_image` is the highest-AUC variant, with the smallest per-fold standard deviation (0.067). The all-in combination (0.5222) is marginally below image-alone (0.5242), consistent with text and KG adding mild noise on a 1,242-sample dataset.
-
-The per-fold standard deviation is large relative to the deltas. With 3 folds and 1 seed, these numbers describe the direction of effect rather than its magnitude with precision. Multi-seed evaluation with more folds would tighten these estimates.
-
-### KG v2 feature upgrade
-
-Session 10a.3 replaced the compact dynamic-width KG context token with a 37-feature leakage-safe relational vector. The new vector includes sector one-hot membership, sector return/beta/volatility context, rolling peer correlations, sector-relative return and volume ranks/z-scores, lead-lag correlations, peer dispersion/spreads, Nifty50 trend/volatility-regime features, sector-rotation indicators, and a sparse-peer flag. The fusion model already projects KG inputs through `Linear(kg_dim, model_dim)`, so the wider vector competes on the same projected dimension as text and image. The empirical contribution is pending a fresh Colab ablation run on a KG v2 artifact.
-
-Session 10a.4 decoupled the KG peer universe from the training universe. The model can still train on the 6-stock smoke set, but KG v2 sector/peer features may now be computed over an OHLCV-only peer universe of additional Nifty50 constituents. This makes sector rank, sector z-scores, peer correlations, sector index returns, and sector beta refer to the stock's broader peer set instead of only the stocks sampled for training. Training tickers are required to be present in the peer universe, peer ticker sector mappings are strict, and post-D peer OHLCV sentinel tests guard the no-future-data contract.
+Run B, where the 37-feature KG over a 14-stock universe produced `−0.028`, is consistent with this conclusion rather than contradictory. At the current data scale, KG is in a noise-dominated regime: richer relational features can help, hurt, or look spuriously strong depending on peer coverage and validation period. The final writeup therefore treats Run C as the honest estimate and does not claim the earlier `+0.045` as a stable effect.
 
 ---
 
-## Diagnostic narratives
+## 3. Per-fold ablation detail: Run C
 
-### Trainer collapse and fix
+Run C evaluates five modality variants with 3-fold purged walk-forward CV. The README reports mean ± standard deviation across folds. The fold-level results are useful because the standard deviations are large relative to the deltas.
 
-The `FusionTransformer` was collapsing to a near-constant predictor regardless of modality variant. Probability ranges were ≤ 0.006 wide; validation AUC stalled below 0.40; F1 locked to recall (all-positive prediction). A mean-pooled logreg on the same tabular features achieved AUC 0.557, proving the signal existed but the Transformer could not access it.
+| Variant | Fold 0 ROC-AUC | Fold 1 ROC-AUC | Fold 2 ROC-AUC | Mean ± std | Δ vs `tabular_only` |
+|---|---:|---:|---:|---:|---:|
+| `tabular_only` | not recorded in summary | not recorded in summary | not recorded in summary | `0.478 ± 0.072` | — |
+| `tabular_kg` | not recorded in summary | not recorded in summary | not recorded in summary | `0.491 ± 0.070` | `+0.014` |
+| `tabular_image` | not recorded in summary | not recorded in summary | not recorded in summary | `0.518 ± 0.048` | `+0.041` |
+| `tabular_text` | not recorded in summary | not recorded in summary | not recorded in summary | `0.519 ± 0.092` | `+0.041` |
+| `tabular_image_text_kg` | not recorded in summary | not recorded in summary | not recorded in summary | `0.496 ± 0.094` | `+0.019` |
 
-The investigation tested four hypotheses sequentially. Output bias initialization (`logit(p_positive)`) resolved the first-epoch loss spike but did not widen the probability band. A 5-epoch linear warmup smoothed loss curves but did not break the saddle point. Switching from CLS token pooling to mean pooling over all sequence tokens (`encoded.mean(dim=1)`) broke the collapse.
+The summary artifact available for Run C records mean and standard deviation but not the individual fold values. The standard deviations alone are enough to constrain the interpretation: with 3 folds and 1 seed, the ranking is more meaningful than the exact delta. Text and image are tied as the strongest single auxiliary modalities in this run, KG is smaller but positive, and the all-modality model adds less than either text-alone or image-alone.
 
-Root cause: in shallow 16-dim encoders with `norm_first=True`, the `[CLS]` token learns near-uniform attention weights across all inputs to minimize early variance. The LayerNorm applied to this uniformly-averaged vector squashes it to zero-mean, unit-variance, destroying sample-to-sample variance. The classification head sees constant input regardless of sequence content. Mean pooling routes gradients directly into the sequence tokens, bypassing the attention bottleneck.
+The all-modality result is a useful negative finding. Combining tabular, KG, image, and text reaches `0.496 ± 0.094`, only `+0.019` over tabular and below `tabular_image` or `tabular_text`. This suggests modality interference or insufficient fusion capacity at the current dataset size. It does not mean multimodal fusion is useless; it means the compact 1-layer, low-dimensional fusion setup is not yet strong enough to exploit all channels simultaneously.
 
-Post-fix: tabular_only reached AUC 0.561 over 50 epochs, and all variants produced distinct probability distributions.
+---
 
-### Train→val transfer failure
-
-After observing sub-0.50 validation AUC on the single held-out period, a 3-fold walk-forward analysis was run to identify the failure cause: (a) label distribution shift, (b) feature non-stationarity, or (c) market regime shift.
-
-The fold-level logreg results above showed fold 1 succeeds while folds 0 and 2 fail, ruling out a uniform failure mode.
-
-**Label stationarity:** Fold 0 shows a +9.8pp base-rate shift (42% positive in train → 52% in val). This is driven by Nifty50 underperforming its constituent stocks during Sep–Dec 2025, making outperformance easier than the model was trained to expect.
-
-**Market regime:** Fold 2 val period (Feb–May 2026) shows Nifty50 daily volatility 2.36× the training period. All 6 stocks show substantially higher annualised volatility in the fold 2 validation window (HDFCBANK 2.64×, SBIN 1.75×, ICICIBANK 1.78×). This is a structural regime change that the features, trained on a lower-volatility distribution, cannot generalize across.
-
-**Feature audit:** All 11 tabular features use only data available at or before prediction date D. No global normalization statistics are computed before the train/val split. No leakage found. The transfer failure is a genuine regime effect, not an artifact of data handling.
-
-Ranking of failure causes: (1) volatility regime shift in fold 2, (2) label base-rate non-stationarity in fold 0. The model finds signal when both stresses are moderate (fold 1).
+## 4. Methodology corrections
 
 ### Backtest correction
 
-Session 10a.2 invalidated the earlier top-k backtest implementation. The bug was not model leakage: stock selection used `y_prob`, but the backtest treated each 3-day forward return as if it were a one-day return and compounded overlapping daily rebalances sequentially. With horizon=3, positions opened on consecutive days are concurrent holdings, so the correct calculation first expands each selected trade into daily holding-period returns, averages all active positions per trading day, and then compounds those daily portfolio returns. The corrected backtest also rejects duplicate `(stock_id, end_date)` prediction rows before merging with realized returns. The previously reported 6-stock backtest figures should be regenerated with `scripts/run_backtest.py` after this correction before being cited.
+The first top-K backtest implementation used the binary label as a return proxy and produced apparent total returns around `+204%` with Sharpe `6.45`. That was implausible for a model whose ROC-AUC was near chance. It was not a valid portfolio simulation.
+
+The corrected backtest uses real forward returns from the price data, aggregates concurrent holdings as daily portfolio returns under daily rebalancing, and deduplicates predictions across folds. Under that corrected path, Run C produces:
+
+| Metric | Value |
+|---|---:|
+| Model total return | `+5.9%` |
+| Benchmark total return | `−4.6%` |
+| Trading days | `157` |
+| Rebalance dates | `155` |
+| Average position count | `2.96` |
+| Sharpe, rf=0 | `0.94` |
+| Max drawdown | `−20.2%` |
+
+This is a much more credible result: modestly positive, with meaningful drawdown, and consistent with a weak but nonzero predictive signal. The important outcome is not that the strategy is ready to trade. It is that the project no longer reports a performance number that depends on a label proxy or overlapping-position compounding bug.
+
+### Trainer collapse fix
+
+Earlier training runs produced near-constant predictions. The validation probability range was approximately `0.006`, ROC-AUC was poor, and classification metrics were dominated by a single-class prediction pattern. A linear baseline on mean-pooled tabular features showed that some signal existed, so the failure was in the training/model path rather than the dataset alone.
+
+The investigation identified two stabilizers. First, class imbalance handling with `BCEWithLogitsLoss(pos_weight=num_neg / num_pos)` made the loss reflect the training fold's label distribution. Second, switching the fusion model's recommended pooling mode from CLS pooling to mean pooling over encoded tokens avoided routing all early gradients through one learned token in a shallow 16-dimensional encoder. The current model code still supports `pooling="cls"`, but `pooling="mean"` is the default and recommended setting.
+
+The architectural lesson is straightforward: in a compact coursework-scale Transformer, mean pooling is less elegant than CLS pooling but more robust. It sends gradient through all modality tokens and reduced the collapse risk in the shallow encoder setting used for CPU/GPU-friendly experimentation.
 
 ---
 
-## What we'd do with more time
+## 5. What we would do with more time
 
-**Universe expansion.** 6 stocks over 1 year produces ~1,242 samples. Expanding to 15–20 Nifty50 stocks over 3 years would produce ~10,000–15,000 samples across multiple volatility regimes. This addresses both the regime-shift sensitivity and the label non-stationarity simultaneously.
+**Multi-seed evaluation.** Run C uses seed `42`. Running 5 or more seeds would put confidence intervals around the modality deltas and show whether text/image consistently dominate KG.
 
-**Multi-seed evaluation.** The headline modality deltas are computed with 3 folds and 1 seed. Running 5+ seeds would produce confidence intervals and allow a claim like "image delta is reliably +X ± Y pp" rather than "image delta was +0.028 in one run."
+**Larger training universe.** The 49-stock peer universe improves KG quality, but the supervised training universe is still only 6 stocks. Expanding to 15–20 training stocks across more sectors and multiple years would test whether the image/text deltas survive a larger sample.
 
-**Regime-conditional training.** Given the fold 2 failure is driven by a 2.36× volatility spike, a volatility-conditioned model — or a two-regime approach with separate heads for low/high volatility — could maintain performance across regime changes.
+**Fusion architecture changes.** The all-modality model underperforms text-alone and image-alone. Next candidates are modality dropout, learned modality weighting, deeper encoder layers, wider `model_dim`, or separate modality-specific adapter layers before fusion.
 
-**Attention attribution.** The fusion Transformer mixes modality tokens with self-attention. Attribution maps (e.g., integrated gradients or attention rollout) would show which tokens drive predictions on fold 1, helping identify whether the image or text modality is contributing meaningful context on individual samples.
+**Regime-aware training.** Short-horizon equity prediction is regime-sensitive. A volatility-conditioned head or regime tag could prevent a model trained in one volatility regime from overgeneralizing to another.
 
-**Longer prediction horizons.** The 3-day horizon is short enough that daily noise dominates. Horizons of 10–20 days might produce more learnable signal, at the cost of fewer non-overlapping samples per year.
+**Longer horizons.** A 3-day horizon is noisy. A 10-day or 20-day horizon might better align news, sector rotation, and price-structure signals, though it would reduce the number of independent labels per year.

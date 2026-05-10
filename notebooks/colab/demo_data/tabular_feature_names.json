@@ -1,0 +1,13 @@
+[
+  "log_return_1d",
+  "cum_return_3d",
+  "cum_return_5d",
+  "cum_return_10d",
+  "realized_vol_5d",
+  "realized_vol_10d",
+  "high_low_range_over_close",
+  "close_over_10dma_minus_1",
+  "close_over_20dma_minus_1",
+  "volume_over_20d_avg",
+  "stock_minus_index_return"
+]
