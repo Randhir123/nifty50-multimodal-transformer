@@ -1,72 +1,33 @@
 # Nifty50 Multimodal Transformer
 
-A coursework-scale **knowledge-augmented multimodal Transformer** for Indian equities.
-
-The goal is to predict whether a stock will outperform the Nifty50 benchmark over a short future horizon by combining four synchronized views of the same stock/date sample:
-
-- **Tabular market data**: OHLCV-derived technical features and relative strength versus Nifty.
-- **Chart images**: Gramian Angular Field (GAF) and Markov Transition Field (MTF) representations of the close-price series, encoded by a small 3-block CNN (`ImageCNN`). This replaces the earlier candlestick PNG + ViT approach. In 3-fold walk-forward CV on a 6-stock, 1-year dataset, `tabular_image` achieved the highest mean AUC of all variants (+2.8pp over tabular-only), confirming that GAF/MTF captures temporal shape information that scalar rolling statistics discard.
-- **Text records**: real external news fetched via `yfinance` and encoded using FinBERT, combined with leakage-safe market summaries.
-- **Knowledge graph context**: sector, peer, event, and recent-return context.
-
-The central object is an aligned multimodal artifact:
-
-```text
-(stock_id, end_date)
-  -> tabular_tokens
-  -> image_tokens
-  -> text_tokens
-  -> kg_tokens
-  -> y
-```
-
-This lets the fusion Transformer learn from numbers, chart structure, text context, and relational context in one shared embedding space.
+A multimodal Transformer that fuses tabular OHLCV features, real financial news (FinBERT), GAF/MTF time-series images (CNN), and a sector/peer knowledge graph to predict short-horizon outperformance vs the Nifty50 index. The pipeline is leakage-safe with mechanically enforced integration tests and walk-forward purged cross-validation. Modality contributions are quantified by independence measurement: real news reduced (tabular, text) distance correlation from near-1 (price-derived text) to 0.17; GAF/MTF encoding raised the image modality's independence from noise-floor (0.047) to clear signal (0.082). Headline finding: image (GAF/MTF) is the strongest single auxiliary modality (+2.8pp AUC); signal is detectable in stable market regimes and degrades on volatility shifts — identified and explained by the diagnostic framework, not discovered in deployment.
 
 ---
 
-## What this repo demonstrates
+## Headline results
 
-This repository is no longer just a collection of modality-specific modules. It now has an end-to-end path that builds real aligned multimodal samples and trains/evaluates fusion variants.
+| Modality combination | Mean AUC | Δ vs tabular_only |
+|---|---|---|
+| tabular_only | 0.4963 | — |
+| tabular + KG | 0.4974 | +0.001 |
+| tabular + text (FinBERT real news) | 0.5104 | +0.014 |
+| tabular + image (GAF/MTF + CNN) | 0.5242 | +0.028 |
+| All four | 0.5222 | +0.026 |
 
-What's implemented:
+*3-fold purged walk-forward CV, 20 epochs, 6 stocks, 1 year of data (1,242 samples). Source: [`docs/diagnostics/session7_decision.md`](docs/diagnostics/session7_decision.md).*
 
-- aligned multimodal sample contract;
-- real tabular rolling-window sample builder;
-- KG token wiring aligned by `stock_id + end_date`;
-- chart-image token wiring using GAF+MTF numpy arrays and `ImageCNN.encode_images(...)` (Session 7: replaced candlestick PNGs + ViT with mathematical time-series images + CNN);
-- text token wiring with `event_date <= end_date` cutoffs;
-- fusion training across modality combinations;
-- ablation runner that compares tabular-only versus multimodal variants;
-- simple top-k portfolio historical backtesting (`scripts/run_backtest.py`);
-- manual real-world demo using yfinance OHLCV snapshots;
-- CI gates for tabular, KG, image, text, and ablation smoke paths.
-
-Not yet claimed:
-
-- real investment performance;
-- heavy external document/PDF parsing;
-- a statistically meaningful backtest;
-- a trained model suitable for financial decisions.
-
-The demo is intended to prove the **pipeline and representation story** first: real market data can be transformed into aligned multimodal embeddings and evaluated through ablations.
+Absolute AUC is modest: the dataset is small (1,242 samples) and spans a single volatile year. The ordering of contributions is coherent — image > text > KG — and the structural independence measurements confirm each modality contributes different information rather than redundant price-derived noise.
 
 ---
 
-## Architecture at a glance
+## Architecture
 
-```text
-yfinance OHLCV snapshots
-  -> feature engineering + labels
-  -> rolling tabular windows
-  -> GAF + MTF time-series images (close-price, 20-day window)
-  -> as-of-date text records (FinBERT-encoded)
-  -> lightweight KG context
-  -> aligned multimodal NPZ
-  -> FusionTransformer (ImageCNN + tabular + text + KG)
-  -> ablation results / rankings / visualizations
-```
+Four modalities are projected into a shared embedding space and mixed by Transformer self-attention:
 
-The fusion model receives modality-specific tokens, projects them into a common dimension, concatenates them with modality embeddings, and applies Transformer self-attention across modalities.
+- **Tabular**: 11 OHLCV-derived technical features over a 20-day rolling window (see [`src/data/features.py`](src/data/features.py)). No global normalization; leakage-free.
+- **Text**: Real financial news fetched from `yfinance` and encoded by FinBERT (768-dim), filtered to `event_date <= prediction_date`. Falls back to deterministic summaries when news is unavailable for a date.
+- **Image**: Gramian Angular Field (GAF) + Markov Transition Field (MTF) images from the 20-day close-price window, encoded by a 3-layer CNN (see [`src/models/image_cnn.py`](src/models/image_cnn.py)). Replaces the earlier candlestick PNG + ViT approach (replaced in session 7 — see "What didn't" below).
+- **Knowledge graph**: 4-dim sector, peer, event, and recent-return context aligned by `(stock_id, prediction_date)`.
 
 ```text
 tabular tokens  ----\
@@ -75,145 +36,123 @@ text tokens     ------> shared sequence -> FusionTransformer -> prediction
 kg tokens       -----/
 ```
 
-Alignment is the critical design rule. Every modality row must describe the same `stock_id` and `end_date`, and no modality can use future information.
+The fusion model ([`src/models/fusion.py`](src/models/fusion.py)) projects each modality into a common dimension, adds modality-type embeddings, concatenates the sequences, and applies multi-head self-attention. The classification head uses mean pooling over all tokens (not a CLS token — see trainer-collapse fix below).
+
+Training uses BCE loss with output bias initialized to `logit(p_positive)`. Default: 3-fold purged walk-forward CV, 20 epochs, CPU-compatible.
 
 ---
 
-## Real-world demo
+## Methodology
 
-The main demo entry point is:
+### Leakage safety
 
-```bash
-python scripts/run_real_world_demo.py \
-  --output-dir data/processed/real_world_demo \
-  --period 9mo \
-  --window-size 20 \
-  --horizon-days 3
-```
+Every sample is keyed by `(stock_id, end_date)`. The pipeline enforces: tabular windows contain only rows with `date <= end_date`; text records are filtered to `event_date <= end_date`; GAF/MTF images are generated from the OHLCV series sliced to `date <= end_date` (filenames encode the cutoff date as `{SYMBOL}_{YYYYMMDD}.npy`); KG context carries `as_of_date = end_date`; labels use forward prices at `end_date+1` through `end_date+H`. These invariants are mechanically verified on every push by [`tests/integration/test_no_leakage.py`](tests/integration/test_no_leakage.py). A separate feature audit ([`docs/diagnostics/session6_5_feature_audit.md`](docs/diagnostics/session6_5_feature_audit.md)) confirmed no leakage in any of the 11 tabular features.
 
-With one-epoch ablations:
+### Cross-validation
 
-```bash
-python scripts/run_real_world_demo.py \
-  --output-dir data/processed/real_world_demo \
-  --period 9mo \
-  --window-size 20 \
-  --horizon-days 3 \
-  --run-ablations \
-  --epochs 1 \
-  --batch-size 4 \
-  --device cpu
-```
+Walk-forward expanding-window CV with purged label-window overlap and an optional embargo gap (see [`src/training/cv.py`](src/training/cv.py)). Default: 3 folds, horizon=3 days. Fold boundaries: fold 0 trains on 300 samples and validates on 311 (Sep–Dec 2025); fold 1 trains on 612 and validates on 311 (Dec 2025–Feb 2026); fold 2 trains on 924 and validates on 310 (Feb–May 2026). Source: [`docs/diagnostics/session6_5_logreg_per_fold.md`](docs/diagnostics/session6_5_logreg_per_fold.md).
 
-Default universe:
+### Modality independence
 
-```text
-Stocks:
-- RELIANCE.NS
-- TCS.NS
-- INFY.NS
-
-Benchmark:
-- ^NSEI
-```
-
-To keep the demo transparent, the stock universe is not hidden in code. You can override it directly from the command line:
-
-```bash
-python scripts/run_real_world_demo.py \
-  --tickers RELIANCE.NS TCS.NS INFY.NS HDFCBANK.NS ICICIBANK.NS SBIN.NS \
-  --benchmark ^NSEI \
-  --output-dir data/processed/real_world_demo \
-  --period 9mo \
-  --window-size 20 \
-  --horizon-days 3 \
-  --run-ablations \
-  --epochs 1 \
-  --batch-size 4 \
-  --device cpu
-```
-
-For a first run or screen recording, start with the default 3-stock universe. Once the path works, rerun with 6-10 stocks for richer charts and ablation visuals.
-
-The run writes:
-
-```text
-data/processed/real_world_demo/
-├── raw/                                # yfinance CSV snapshots
-├── charts/                             # generated candlestick PNGs
-├── tabular_samples.csv                 # real feature/label rows
-├── text_records.csv                    # as-of market-summary text records
-├── stock_sectors.csv                   # lightweight sector mapping
-├── kg_returns.csv                      # recent-return features for KG context
-├── event_records.csv                   # high-volume event flags
-├── real_world_multimodal_samples.npz   # aligned multimodal artifact
-├── DEMO_SUMMARY.md                     # run summary
-├── backtest/                           # portfolio backtest metrics and plots
-└── ablations/                          # optional, when --run-ablations is set
-    ├── ablation_results.csv
-    └── ablation_results.json
-```
-
-For the detailed walkthrough and recording checklist, see:
-
-```text
-docs/real-world-demo.md
-```
+Each modality's contribution is verified by distance correlation between mean-pooled embeddings. A score near the noise floor (~0.041) indicates the modality is redundant with others; a higher score indicates genuine complementarity. Before real news ETL, text tokens were price-derived and near-fully correlated with tabular features. After real news: (tabular, text) = 0.170. After GAF/MTF encoding: (tabular, image) = 0.082, up from 0.047 with the candlestick ViT. Source: [`docs/diagnostics/session6_independence_post_news.csv`](docs/diagnostics/session6_independence_post_news.csv), [`docs/diagnostics/session7_independence_post_gaf.csv`](docs/diagnostics/session7_independence_post_gaf.csv). Independence is measured using [`scripts/check_modality_independence.py`](scripts/check_modality_independence.py).
 
 ---
 
-## How to demonstrate value
+## Experimental findings
 
-A strong demo should not start with code. It should start with the value question:
+### Modality contributions
 
-> Can the model see something useful when price behavior, chart structure, text context, and peer/sector relationships are represented together?
+The image modality (GAF/MTF + CNN) is the largest single addition (+0.028 AUC over tabular_only), more than doubling the text contribution (+0.014). The KG contribution (+0.001) is indistinguishable from noise at this dataset scale. The all-four combination (0.5222) is marginally below image-alone (0.5242), consistent with mild noise from text and KG on a 1,242-sample dataset.
 
-Recommended demo sequence:
+With only 3 folds and a single random seed, the *ordering* of contributions is interpretable but individual deltas should not be taken as precise estimates. Multi-seed evaluation would be needed for confidence intervals. What the data supports: image carries independent temporal-shape signal that tabular rolling statistics discard; text carries recent news sentiment independently of price features; KG adds weak peer context at this dataset scale.
 
-1. **Show the raw modalities**  
-   Open `tabular_samples.csv`, a few files from `charts/`, `text_records.csv`, and `event_records.csv`.
+### Train→val transfer fails on volatility regime shifts
 
-2. **Show alignment**  
-   Open `DEMO_SUMMARY.md` and explain that every row is keyed by `stock_id + end_date`.
+Per-fold logistic regression AUC (source: [`docs/diagnostics/session6_5_logreg_per_fold.md`](docs/diagnostics/session6_5_logreg_per_fold.md)):
 
-3. **Show the embedding artifact**  
-   Inspect `real_world_multimodal_samples.npz` and its shapes: `tabular_tokens`, `image_tokens`, `text_tokens`, `kg_tokens`, `y`.
+| Fold | Period | Val AUC | Primary stress |
+|---|---|---|---|
+| 0 | Sep–Dec 2025 | 0.443 | Label base-rate shift (+9.8pp) |
+| 1 | Dec 2025–Feb 2026 | **0.544** | Moderate — both stresses low |
+| 2 | Feb–May 2026 | 0.413 | Nifty50 volatility 2.36× training period |
 
-4. **Show fusion**  
-   Explain that `FusionTransformer` projects all modalities into a common dimension and uses self-attention to mix them.
+Fold 1 carries the meaningful signal: val AUC 0.544 on a logistic regression over 11 mean-pooled features, demonstrating extractable signal exists in stable regimes. Fold 0 fails because the label base rate shifts by 9.8pp (42% → 52% positive), driven by Nifty50 underperforming its constituents during that period. Fold 2 fails because Nifty50 daily volatility in the validation window is 2.36× higher than training — a structural regime change (consistent with global macro turbulence in early 2026) that features trained on a lower-volatility period cannot generalize across.
 
-5. **Show ablations**  
-   Open `ablations/ablation_results.csv` and compare:
+Feature audit found no leakage. This is a true regime-shift effect. Walk-forward CV surfaced the finding; a single train/test split would have hidden it. Source: [`docs/diagnostics/session6_5_summary.md`](docs/diagnostics/session6_5_summary.md).
 
-   ```text
-   tabular_only
-   tabular_kg
-   tabular_image
-   tabular_text
-   tabular_image_text_kg
-   ```
+### Backtest is honest and negative
 
-6. **Be honest about backtesting**  
-   Show the simple top-k portfolio backtest curve, but explain that it is a conceptual simulation without slippage or transaction costs.
+Using real 3-day forward returns (corrected in session 6 from a y-proxy that produced disguised classification accuracy), the backtest shows model underperformance on both universes (source: [`docs/diagnostics/session6_backtest_corrected.md`](docs/diagnostics/session6_backtest_corrected.md)):
+
+| Universe | Model return | Benchmark return |
+|---|---|---|
+| 3-stock (RELIANCE, TCS, INFY) | −13.9% | +8.6% |
+| 6-stock | −52.1% | −16.1% |
+
+This is mechanically consistent with the per-fold diagnostics: fold 2 val AUC 0.413 means the top-1 selection is anti-predictive in the high-volatility period, which compounds over 49–52 daily rebalances to the −52% figure. The previous proxy result (+13–18% model returns) was an artifact of assigning a fixed +1% return to every positive-labelled day regardless of actual prices.
 
 ---
 
-## Setup
+## What worked, what didn't, what's open
+
+**Worked.** Leakage-safe pipeline with integration test enforcement. Walk-forward CV with purging — the regime-shift finding is what walk-forward CV is for. Trainer collapse fix: CLS token pooling was collapsing to constant output in shallow 16-dim encoders (probability range ≤ 0.006); switching to mean pooling over all tokens broke the saddle point and restored normal gradient flow, with post-fix tabular_only reaching AUC 0.561 over 50 epochs ([`docs/diagnostics/session5_findings.md`](docs/diagnostics/session5_findings.md)). Real news ETL: (tabular, text) independence rose from near-0 to 0.170. GAF/MTF + CNN: strongest single auxiliary modality, independence meaningfully above noise floor. Corrected backtest: the honest negative result replaced the proxy positive result.
+
+**Didn't.** ViT-from-scratch chart encoder: with 300–900 training samples per fold, the ViT could not learn discriminative spatial features; image tokens were effectively random noise at independence 0.047 ≈ noise floor. Candlestick PNG rendering: adds overhead and asks the model to learn visual feature extraction rather than exploit temporal structure. Both were identified by measurement and replaced with GAF/MTF + CNN in session 7. 16-dim image bottleneck from the ViT pipeline: removed.
+
+**Open.** Universe expansion to 15–20 Nifty50 stocks with 3+ years of history was identified in session 6.5 as the highest-leverage next step — it addresses both the regime-shift sensitivity (more data covers multiple volatility periods) and the label non-stationarity (larger peer set reduces sector-rotation noise). Multi-seed evaluation for confidence intervals on modality deltas. Regime-conditional models or volatility-aware training. Longer prediction horizons. Attention attribution to identify which tokens drive predictions.
+
+---
+
+## Reproducing the results
 
 ```bash
 python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
+.venv\Scripts\activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 pip install -e .
 ```
 
-Run tests:
+Run all tests:
 
 ```bash
 pytest
 ```
 
-Targeted checks:
+Build a toy all-modality artifact:
+
+```bash
+python scripts/build_multimodal_samples.py --toy-output data/processed/multimodal_samples.npz
+```
+
+Run the real-world demo (3-stock universe, with ablations):
+
+```bash
+python scripts/run_real_world_demo.py \
+  --output-dir data/processed/real_world_demo \
+  --period 9mo --window-size 20 --horizon-days 3 \
+  --run-ablations --epochs 1 --batch-size 4 --device cpu
+```
+
+To reproduce the headline results table (20 epochs, 3-fold CV), first run the demo to build the artifact, then:
+
+```bash
+python scripts/run_ablation_study.py \
+  --dataset data/processed/real_world_demo/real_world_multimodal_samples_gaf.npz \
+  --output-dir data/processed/ablations \
+  --cv-splits 3 --horizon-days 3 --embargo-days 5 \
+  --epochs 20 --batch-size 4 --device cpu \
+  --model-dim 16 --num-heads 4 --num-layers 1 --ff-dim 32
+```
+
+Generate visualization artifacts:
+
+```bash
+python scripts/visualize_real_world_demo.py --demo-dir data/processed/real_world_demo
+```
+
+For the detailed demo walkthrough and recording checklist, see [`docs/real-world-demo.md`](docs/real-world-demo.md).
+
+Targeted test checks:
 
 ```bash
 pytest tests/unit/test_multimodal_sample_builder.py
@@ -222,135 +161,36 @@ pytest tests/unit/test_kg_multimodal_samples.py
 pytest tests/unit/test_image_multimodal_samples.py
 pytest tests/unit/test_text_multimodal_samples.py
 pytest tests/unit/test_ablation_runner.py
+pytest tests/integration/test_no_leakage.py
 ```
 
 ---
 
-## Key commands
-
-Build a toy all-modality artifact:
-
-```bash
-python scripts/build_multimodal_samples.py \
-  --toy-output data/processed/multimodal_samples.npz
-```
-
-Run fusion training on an all-modality artifact:
-
-```bash
-python -m src.training.train_fusion \
-  --dataset data/processed/multimodal_samples.npz \
-  --use-image --use-text --use-kg \
-  --epochs 1 \
-  --batch-size 4 \
-  --device cpu
-```
-
-Run ablations:
-
-```bash
-python scripts/run_ablation_study.py \
-  --dataset data/processed/multimodal_samples.npz \
-  --output-dir data/processed/ablations \
-  --epochs 1 \
-  --batch-size 2 \
-  --device cpu \
-  --model-dim 16 \
-  --num-heads 4 \
-  --num-layers 1 \
-  --ff-dim 32
-```
-
-Generate visualization artifacts (embedding projections + ablation bar charts):
-
-```bash
-python scripts/visualize_real_world_demo.py \
-  --demo-dir data/processed/real_world_demo
-```
-
----
-
-## Repository layout
+## Project structure
 
 ```text
 .
-├── AGENTS.md                     # agent workflow instructions
-├── .agent-skills/                # local agent skills for disciplined PRs
+├── AGENTS.md                     # contributor workflow instructions
 ├── config/                       # ticker lists
-├── data/                         # raw/interim/processed artifacts, not committed
-├── docs/                         # demo and project documentation
-├── scripts/                      # runnable demos and experiment drivers
-├── specs/                        # implementation specs
+├── docs/
+│   ├── diagnostics/              # per-session diagnostic files and source tables
+│   │   └── INDEX.md              # index of all diagnostic files with headline numbers
+│   ├── findings.md               # experimental findings in depth
+│   └── real-world-demo.md        # demo walkthrough and recording checklist
+├── scripts/                      # runnable demos, ablations, backtest, diagnostics
 ├── src/
-│   ├── app/                      # workflow/API-style wrappers
 │   ├── data/                     # downloads, features, labels, sample builders
 │   ├── kg/                       # graph construction and context retrieval
-│   ├── models/                   # tabular, image, text, fusion models
-│   ├── training/                 # training loops and metrics
-│   └── viz/                      # ranking, embedding projection, peer graph utilities
-└── tests/                        # unit, smoke, integration tests
+│   ├── models/                   # tabular, image (CNN), text, fusion models
+│   ├── training/                 # train_fusion, cv splits, metrics
+│   └── viz/                      # ranking, embedding projection utilities
+└── tests/
+    ├── integration/              # leakage gate, modality pipeline end-to-end
+    └── unit/                     # per-module tests
 ```
-
----
-
-## Cross-validation
-
-The ablation runner supports purged walk-forward cross-validation to produce more reliable mean ± std estimates across multiple time folds.
-
-```bash
-python scripts/run_ablation_study.py \
-  --dataset data/processed/multimodal_samples.npz \
-  --output-dir data/processed/ablations \
-  --cv-splits 3 \
-  --horizon-days 3 \
-  --embargo-days 5 \
-  --epochs 1 \
-  --batch-size 2 \
-  --device cpu \
-  --model-dim 16 \
-  --num-heads 4 \
-  --num-layers 1 \
-  --ff-dim 32
-```
-
-`--cv-splits N` (N > 1) divides the dataset chronologically into N+1 equal chunks and runs N expanding-window folds. Two groups are excluded from each fold's training set:
-
-- **Purged** samples whose label window (`end_date + horizon_days` calendar days) reaches into the validation period.
-- **Embargoed** samples within `embargo_days` calendar days before the validation start.
-
-The effective exclusion cutoff is `fold_start − max(horizon_days, embargo_days)`.
-
-Outputs:
-
-```text
-ablations/
-├── ablation_results.csv          # one row per variant, mean metrics across folds
-├── ablation_results_folds.csv    # one row per variant × fold
-├── ablation_results.json
-└── ablation_diagnostics.md
-```
-
-Use `--single-split` (or the default `--cv-splits 1`) to keep the original single-fold subprocess behaviour, which is what the CI smoke step uses.
-
----
-
-## Leakage guarantees
-
-Every multimodal sample is keyed by `(stock_id, end_date)`. The pipeline enforces that for prediction date `D` with horizon `H`: tabular windows contain only rows with `date <= D`; text records are filtered to `event_date <= D`; candlestick chart filenames encode `D` (format `{SYMBOL}_{YYYYMMDD}.png`) and are generated from OHLCV data sliced to `date <= D`; KG context carries an `as_of_date` field equal to `D`; and the label is computed from prices at `D+1` through `D+H`, with NaN-labelled rows dropped so a sample is never emitted without valid future data.
-
-These invariants are mechanically verified in [`tests/integration/test_no_leakage.py`](tests/integration/test_no_leakage.py) using deterministic synthetic data. The test covers six positive assertions and two negative tests (future text injection is dropped; truncated future raises rather than silently falling back). It runs on every push and pull request as a required CI gate. GAF/MTF image filenames follow the same convention (`{SYMBOL}_{YYYYMMDD}.npy`) and are covered by the same gate. The test does not cover subtler issues such as train/test contamination across time folds — that requires purged walk-forward cross-validation, which is a separate concern.
-
----
-
-## Current limitations
-
-- The real-world demo uses yfinance snapshots, so runs can differ over time unless you keep the generated `raw/` CSVs.
-- The text modality in the real-world demo uses recent `yfinance` news and FinBERT, falling back to deterministic summaries for older historical dates.
-- Ablation metrics are classification metrics from short training runs unless you increase epochs and tune properly.
-- The included portfolio backtest is a simple top-k simulation without transaction costs or slippage.
 
 ---
 
 ## Responsible use
 
-This is an educational/coursework project. It is not financial advice, not a trading system, and not a validated investment model.
+This is a coursework project. It is not financial advice, not a trading system, and not a validated investment model. The backtest underperforms the benchmark. The absolute AUC numbers are modest. The diagnostic framework — leakage safety, walk-forward CV, modality independence measurement — is the primary contribution.
