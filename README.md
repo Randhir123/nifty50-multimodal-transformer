@@ -1,6 +1,12 @@
 # Nifty50 Multimodal Transformer
 
-A multimodal Transformer for short-horizon Nifty50 outperformance prediction. The project combines four views of the same stock/date sample: tabular OHLCV features, real financial news encoded with FinBERT, GAF/MTF time-series images encoded with a CNN, and relational sector/peer knowledge-graph features. The pipeline is leakage-safe, uses purged walk-forward cross-validation, and evaluates whether each modality contributes signal beyond a tabular baseline. The cleanest current result comes from Run C: a 6-stock training subset with 37-feature KG context computed against a 49-stock Nifty50 peer universe.
+A multimodal Transformer for short-horizon Nifty50 outperformance prediction. The project combines four views of the same stock/date sample: 
+* tabular OHLCV features,
+* real financial news encoded with FinBERT,
+* GAF/MTF time-series images encoded with a CNN, and
+* relational sector/peer knowledge-graph features.
+
+The pipeline is leakage-safe, uses purged walk-forward cross-validation, and evaluates whether each modality contributes signal beyond a tabular baseline. The cleanest current result comes from this run: a 6-stock training subset with 37-feature KG context computed against a 49-stock Nifty50 peer universe.
 
 This is an educational/coursework project, not financial advice or a trading system.
 
@@ -8,7 +14,19 @@ This is an educational/coursework project, not financial advice or a trading sys
 
 ## Headline results
 
-All headline numbers below are from Run C, run ID `20260510_102537`: 6 training stocks, 49-stock Nifty50 peer universe, 1,260 samples, 45.1% positive label rate, 20-day windows, 3-day horizon, 3-fold purged walk-forward CV, embargo=3 days, 20 epochs, batch size 16, seed 42, GPU.
+All headline numbers below are from this run: 
+* 6 training stocks,
+* 49-stock Nifty50 peer universe,
+* 1,260 samples,
+* 45.1% positive label rate,
+* 20-day windows,
+* 3-day horizon,
+* 3-fold purged walk-forward CV,
+* embargo=3 days,
+* 20 epochs,
+* batch size 16,
+* seed 42,
+* GPU.
 
 ### Modality contributions
 
@@ -22,7 +40,7 @@ All headline numbers below are from Run C, run ID `20260510_102537`: 6 training 
 
 ### Corrected backtest
 
-Run C backtest uses real 3-day forward returns, top-K=3 selection, daily rebalancing, and 155 rebalance dates across 157 trading days.
+This run backtest uses real 3-day forward returns, top-K=3 selection, daily rebalancing, and 155 rebalance dates across 157 trading days.
 
 | Metric | Model | Benchmark |
 |---|---:|---:|
@@ -59,7 +77,7 @@ The training universe is intentionally small: 6 stocks where price, news, and im
 
 The KG modality went through three measured configurations. The first compact KG had 4 features — sector identifier, peer return, recent return, and event flags — computed against the same 6-stock training universe. Its contribution was effectively zero: `−0.003` in the initial run and `+0.001` after the trainer fix. Replacing it with a 37-feature relational vector — sector context, peer correlations, relative ranks, dispersion, spreads, and regime indicators — improved the ablation delta to `+0.045`, but that result still used a 6-stock peer universe.
 
-Run C repeated the experiment with the same 6-stock training universe but computed KG features against a 49-stock Nifty50 peer universe. The KG delta dropped from `+0.045` to `+0.014`. That correction is important. It means the earlier `+0.045` was partly an artifact of the too-small peer universe: random-looking peer features over a small set can appear predictive in a small validation sample. The conservative Run C interpretation is that KG carries real but small incremental information: its independence from tabular features is `0.166` versus a shuffled baseline of `0.041`, but the predictive delta is only `+0.014` ROC-AUC at this scale.
+In this run, we repeated the experiment with the same 6-stock training universe but computed KG features against a 49-stock Nifty50 peer universe. The KG delta dropped from `+0.045` to `+0.014`. That correction is important. It means the earlier `+0.045` was partly an artifact of the too-small peer universe: random-looking peer features over a small set can appear predictive in a small validation sample. The conservative Run C interpretation is that KG carries real but small incremental information: its independence from tabular features is `0.166` versus a shuffled baseline of `0.041`, but the predictive delta is only `+0.014` ROC-AUC at this scale.
 
 The backtest underwent a similar correction. An early implementation used the binary label as a return proxy and reported apparent total returns around `+204%` with Sharpe `6.45`, which was implausible for a model whose ROC-AUC was near 0.5. The corrected backtest uses real forward returns, aggregates concurrent holdings under daily rebalancing, and deduplicates predictions across folds. Under that corrected path, Run C produces `+5.9%` model return versus `−4.6%` benchmark return, Sharpe `0.94`, and max drawdown `−20.2%`. These corrections are explicit because the methodology is only credible if the headline numbers survive robustness checks.
 
@@ -91,56 +109,12 @@ The fusion model projects each enabled modality to `model_dim`, adds learned mod
 
 ## Architecture diagram
 
-```mermaid
-flowchart LR
-    subgraph Inputs["Inputs at sample (s, D)"]
-        T["Tabular<br/>20 x 11 OHLCV<br/>features"]
-        N["News headlines<br/>with event_date <= D"]
-        C["Close-price<br/>20-day window"]
-        K["49-stock peer universe<br/>OHLCV up to D"]
-    end
-
-    subgraph Encoders["Modality encoders"]
-        TE["Rolling tabular<br/>window builder"]
-        NE["FinBERT<br/>768-dim embedding"]
-        CE["GAF + MTF<br/>+ ImageCNN"]
-        KE["Sector + peer +<br/>regime features<br/>37 dims"]
-    end
-
-    subgraph Projections["Projection to shared model_dim"]
-        TP["Linear(tabular_dim -> model_dim)"]
-        NP["Linear(768 -> model_dim)"]
-        CP["Linear(image_dim -> model_dim)"]
-        KP["Linear(37 -> model_dim)"]
-    end
-
-    subgraph Fusion["FusionTransformer"]
-        ME["Add learned<br/>modality embeddings"]
-        PE["Sinusoidal<br/>positional encoding"]
-        F["Transformer encoder<br/>self-attention"]
-        P["Mean pooling<br/>over encoded tokens"]
-    end
-
-    subgraph Output["Output"]
-        H["Dropout + Linear head"]
-        Y["P(outperform Nifty50)<br/>over D+1 to D+H"]
-    end
-
-    T --> TE --> TP --> ME
-    N --> NE --> NP --> ME
-    C --> CE --> CP --> ME
-    K --> KE --> KP --> ME
-    ME --> PE --> F --> P --> H --> Y
-
-    style F fill:#e1f5ff
-    style Y fill:#d4edda
-```
-
+![Architecture Diagram](images/arch.png) 
 ---
 
 ## Limitations and what's open
 
-**Scale.** Run C trains on 6 stocks over 1 year, producing 1,260 samples. The 49-stock peer universe improves KG feature quality, but the supervised training set is still small. These numbers should be replicated on a larger training universe and longer history before making stronger claims.
+**Scale.** This run trains on 6 stocks over 1 year, producing 1,260 samples. The 49-stock peer universe improves KG feature quality, but the supervised training set is still small. These numbers should be replicated on a larger training universe and longer history before making stronger claims.
 
 **Combining modalities currently hurts.** The all-four variant improves over tabular-only by `+0.019`, but underperforms text-alone and image-alone, each at `+0.041`. This is a genuine finding: at this dataset size, adding modalities appears to introduce noise faster than the compact fusion model can resolve it. Possible fixes include more data, deeper fusion, modality dropout, learned modality weighting, or regime-aware heads.
 
