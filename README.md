@@ -1,46 +1,37 @@
 # Nifty50 Multimodal Transformer
 
-A multimodal Transformer that fuses tabular OHLCV features, real financial news (FinBERT), GAF/MTF time-series images (CNN), and a sector/peer knowledge graph to predict short-horizon outperformance vs the Nifty50 index. The pipeline is leakage-safe with mechanically enforced integration tests and walk-forward purged cross-validation. Modality contributions are quantified by independence measurement: real news reduced (tabular, text) distance correlation from near-1 (price-derived text) to 0.17; GAF/MTF encoding raised the image modality's independence from noise-floor (0.047) to clear signal (0.082). Headline finding: image (GAF/MTF) is the strongest single auxiliary modality (+2.8pp AUC); signal is detectable in stable market regimes and degrades on volatility shifts — identified and explained by the diagnostic framework, not discovered in deployment.
+A multimodal Transformer for short-horizon Nifty50 outperformance prediction. The project combines four views of the same stock/date sample: tabular OHLCV features, real financial news encoded with FinBERT, GAF/MTF time-series images encoded with a CNN, and relational sector/peer knowledge-graph features. The pipeline is leakage-safe, uses purged walk-forward cross-validation, and evaluates whether each modality contributes signal beyond a tabular baseline. The cleanest current result comes from Run C: a 6-stock training subset with 37-feature KG context computed against a 49-stock Nifty50 peer universe.
+
+This is an educational/coursework project, not financial advice or a trading system.
 
 ---
 
 ## Headline results
 
-| Modality combination | Mean AUC | Δ vs tabular_only |
-|---|---|---|
-| tabular_only | 0.4963 | — |
-| tabular + KG | 0.4974 | +0.001 |
-| tabular + text (FinBERT real news) | 0.5104 | +0.014 |
-| tabular + image (GAF/MTF + CNN) | 0.5242 | +0.028 |
-| All four | 0.5222 | +0.026 |
+All headline numbers below are from Run C, run ID `20260510_102537`: 6 training stocks, 49-stock Nifty50 peer universe, 1,260 samples, 45.1% positive label rate, 20-day windows, 3-day horizon, 3-fold purged walk-forward CV, embargo=3 days, 20 epochs, batch size 16, seed 42, GPU.
 
-*3-fold purged walk-forward CV, 20 epochs, 6 stocks, 1 year of data (1,242 samples). Full per-variant results in [`docs/findings.md`](docs/findings.md).*
+### Modality contributions
 
-Absolute AUC is modest: the dataset is small (1,242 samples) and spans a single volatile year. The ordering of contributions is coherent — image > text > KG — and the structural independence measurements confirm each modality contributes different information rather than redundant price-derived noise.
+| Variant | ROC-AUC mean ± std | Δ vs `tabular_only` |
+|---|---:|---:|
+| `tabular_only` | 0.478 ± 0.072 | — |
+| `tabular_kg` — 37 relational KG features | 0.491 ± 0.070 | +0.014 |
+| `tabular_image` — GAF/MTF + CNN | 0.518 ± 0.048 | +0.041 |
+| `tabular_text` — FinBERT real news | 0.519 ± 0.092 | +0.041 |
+| `tabular_image_text_kg` — all four modalities | 0.496 ± 0.094 | +0.019 |
 
----
+### Corrected backtest
 
-## Architecture
+Run C backtest uses real 3-day forward returns, top-K=3 selection, daily rebalancing, and 155 rebalance dates across 157 trading days.
 
-Four modalities are projected into a shared embedding space and mixed by Transformer self-attention:
+| Metric | Model | Benchmark |
+|---|---:|---:|
+| Total return | +5.9% | −4.6% |
+| Sharpe, rf=0 | 0.94 | n/a |
+| Max drawdown | −20.2% | — |
+| Average position count | 2.96 | — |
 
-- **Tabular**: 11 OHLCV-derived technical features over a 20-day rolling window (see [`src/data/features.py`](src/data/features.py)). No global normalization; leakage-free.
-- **Text**: Real financial news fetched from `yfinance` and encoded by FinBERT (768-dim), filtered to `event_date <= prediction_date`. Falls back to deterministic summaries when news is unavailable for a date.
-- **Image**: Gramian Angular Field (GAF) + Markov Transition Field (MTF) images from the 20-day close-price window, encoded by a 3-layer CNN (see [`src/models/image_cnn.py`](src/models/image_cnn.py)). Replaces the earlier candlestick PNG + ViT approach (see "What didn't" below).
-- **Knowledge graph**: 37-dim sector, peer, and market-regime context aligned by `(stock_id, prediction_date)`. KG features can be computed from a larger OHLCV-only peer universe while training remains on a smaller stock set.
-
-```text
-tabular tokens  ----\
-image tokens    -----\
-text tokens     ------> shared sequence -> FusionTransformer -> prediction
-kg tokens       -----/
-```
-
-The fusion model ([`src/models/fusion.py`](src/models/fusion.py)) projects each modality into a common dimension, adds modality-type embeddings, concatenates the sequences, and applies multi-head self-attention. The classification head uses mean pooling over all tokens (not a CLS token — see trainer-collapse fix below).
-
-Training uses BCE loss with output bias initialized to `logit(p_positive)`. Default: 3-fold purged walk-forward CV, 20 epochs, CPU-compatible.
-
-For key design decisions (GAF/MTF, purged CV, FinBERT), see [`docs/design-notes.md`](docs/design-notes.md).
+The absolute AUC is modest because the experiment is small: 1,260 samples, 6 training stocks, and 1 year of market history. The ordering of the ablation deltas is the useful result: text and image each add about +0.041 ROC-AUC over the tabular baseline, KG adds a smaller +0.014, and the all-modality model currently underperforms the best single auxiliary modality. The backtest is also deliberately modest: +5.9% model return versus −4.6% benchmark return after correcting earlier return-proxy and overlapping-position bugs.
 
 ---
 
@@ -48,61 +39,120 @@ For key design decisions (GAF/MTF, purged CV, FinBERT), see [`docs/design-notes.
 
 ### Leakage safety
 
-Every sample is keyed by `(stock_id, end_date)`. The pipeline enforces: tabular windows contain only rows with `date <= end_date`; text records are filtered to `event_date <= end_date`; GAF/MTF images are generated from the OHLCV series sliced to `date <= end_date` (filenames encode the cutoff date as `{SYMBOL}_{YYYYMMDD}.npy`); KG context carries `as_of_date = end_date`; labels use forward prices at `end_date+1` through `end_date+H`. These invariants are mechanically verified on every push by [`tests/integration/test_no_leakage.py`](tests/integration/test_no_leakage.py). A separate manual audit confirmed no leakage in any of the 11 tabular features — all features use only data available at or before date D.
+Every sample is keyed by `(stock_id, end_date)`. Tabular windows contain only rows with `date <= end_date`; text records are filtered to `event_date <= end_date`; GAF/MTF images are generated from price windows ending at `end_date`; KG features are computed as of `end_date`; and labels use future returns from `end_date + 1` through `end_date + horizon`. The KG modality also enforces leakage safety over the peer universe: peer correlations, sector statistics, and market-regime features for sample `(s, D)` use only data with `date <= D`. These invariants are tested in [`tests/integration/test_no_leakage.py`](tests/integration/test_no_leakage.py).
 
 ### Cross-validation
 
-Walk-forward expanding-window CV with purged label-window overlap and an optional embargo gap (see [`src/training/cv.py`](src/training/cv.py)). Default: 3 folds, horizon=3 days. Fold boundaries: fold 0 trains on 300 samples and validates on 311 (Sep–Dec 2025); fold 1 trains on 612 and validates on 311 (Dec 2025–Feb 2026); fold 2 trains on 924 and validates on 310 (Feb–May 2026). See [`docs/findings.md`](docs/findings.md) for fold details.
+Evaluation uses purged walk-forward cross-validation with an expanding training window. Purging removes training samples whose label window overlaps the validation fold; the Run C setting uses 3 folds with a 3-day embargo. The implementation is in [`src/training/cv.py`](src/training/cv.py). With only 1,260 samples and one random seed, fold-level variance remains meaningful, so the results should be read as evidence of signal ordering rather than precise estimates of each modality's true contribution.
 
 ### Modality independence
 
-Each modality's contribution is verified by distance correlation between mean-pooled embeddings. A score near the noise floor (~0.041) indicates the modality is redundant with others; a higher score indicates genuine complementarity. Before real news ETL, text tokens were price-derived and near-fully correlated with tabular features. After real news: (tabular, text) = 0.170. After GAF/MTF encoding: (tabular, image) = 0.082, up from 0.047 with the candlestick ViT. Independence is measured using [`scripts/check_modality_independence.py`](scripts/check_modality_independence.py). Full tables in [`docs/findings.md`](docs/findings.md).
+The project measures distance correlation between mean-pooled modality embeddings to check whether auxiliary modalities contain information not already present in tabular features. Run C independence values are: `(tabular, text)=0.143`, `(tabular, image)=0.131`, `(tabular, kg)=0.166`, `(text, kg)=0.173`, versus a shuffled baseline of `0.041`. The KG-tabular independence rose from `0.130` with the earlier 4-feature / small-peer configuration to `0.166` with the 37-feature KG and 49-stock peer universe.
+
+### Peer universe versus training universe
+
+The training universe is intentionally small: 6 stocks where price, news, and image data can be processed reliably in a coursework-scale Colab run. The KG peer universe is much larger: 49 current Nifty50 tickers, excluding TMPV because of post-demerger ticker uncertainty. This decoupling lets the model train on a manageable rich-data subset while computing sector, peer-correlation, rank, dispersion, and regime features against a representative market universe.
 
 ---
 
-## Experimental findings
+## Methodology robustness — what the iteration showed
 
-### Modality contributions
+The KG modality went through three measured configurations. The first compact KG had 4 features — sector identifier, peer return, recent return, and event flags — computed against the same 6-stock training universe. Its contribution was effectively zero: `−0.003` in the initial run and `+0.001` after the trainer fix. Replacing it with a 37-feature relational vector — sector context, peer correlations, relative ranks, dispersion, spreads, and regime indicators — improved the ablation delta to `+0.045`, but that result still used a 6-stock peer universe.
 
-The image modality (GAF/MTF + CNN) is the largest single addition (+0.028 AUC over tabular_only), more than doubling the text contribution (+0.014). The KG contribution (+0.001) is indistinguishable from noise at this dataset scale. The all-four combination (0.5222) is marginally below image-alone (0.5242), consistent with mild noise from text and KG on a 1,242-sample dataset.
+Run C repeated the experiment with the same 6-stock training universe but computed KG features against a 49-stock Nifty50 peer universe. The KG delta dropped from `+0.045` to `+0.014`. That correction is important. It means the earlier `+0.045` was partly an artifact of the too-small peer universe: random-looking peer features over a small set can appear predictive in a small validation sample. The conservative Run C interpretation is that KG carries real but small incremental information: its independence from tabular features is `0.166` versus a shuffled baseline of `0.041`, but the predictive delta is only `+0.014` ROC-AUC at this scale.
 
-With only 3 folds and a single random seed, the *ordering* of contributions is interpretable but individual deltas should not be taken as precise estimates. Multi-seed evaluation would be needed for confidence intervals. What the data supports so far: image carries independent temporal-shape signal that tabular rolling statistics discard; text carries recent news sentiment independently of price features; the upgraded KG v2 branch is now capacity-comparable but still needs a fresh ablation run before making a contribution claim.
-
-### Train→val transfer fails on volatility regime shifts
-
-Per-fold logistic regression AUC (full detail in [`docs/findings.md`](docs/findings.md)):
-
-| Fold | Period | Val AUC | Primary stress |
-|---|---|---|---|
-| 0 | Sep–Dec 2025 | 0.443 | Label base-rate shift (+9.8pp) |
-| 1 | Dec 2025–Feb 2026 | **0.544** | Moderate — both stresses low |
-| 2 | Feb–May 2026 | 0.413 | Nifty50 volatility 2.36× training period |
-
-Fold 1 carries the meaningful signal: val AUC 0.544 on a logistic regression over 11 mean-pooled features, demonstrating extractable signal exists in stable regimes. Fold 0 fails because the label base rate shifts by 9.8pp (42% → 52% positive), driven by Nifty50 underperforming its constituents during that period. Fold 2 fails because Nifty50 daily volatility in the validation window is 2.36× higher than training — a structural regime change (consistent with global macro turbulence in early 2026) that features trained on a lower-volatility period cannot generalize across.
-
-Feature audit found no leakage. This is a true regime-shift effect. Walk-forward CV surfaced the finding; a single train/test split would have hidden it. Full breakdown in [`docs/findings.md`](docs/findings.md).
-
-### Backtest status
-
-Using real 3-day forward returns replaced an earlier `y_true` proxy, but session 10a.2 found a second backtest bug: overlapping 3-day positions were compounded as sequential trades. The corrected backtest now aggregates concurrent holdings into daily portfolio returns before compounding and rejects duplicate `(stock_id, end_date)` prediction rows.
-
-The old headline backtest numbers are therefore not cited here. Regenerate them with `scripts/run_backtest.py` or the Colab experiment runner before making any performance claim.
+The backtest underwent a similar correction. An early implementation used the binary label as a return proxy and reported apparent total returns around `+204%` with Sharpe `6.45`, which was implausible for a model whose ROC-AUC was near 0.5. The corrected backtest uses real forward returns, aggregates concurrent holdings under daily rebalancing, and deduplicates predictions across folds. Under that corrected path, Run C produces `+5.9%` model return versus `−4.6%` benchmark return, Sharpe `0.94`, and max drawdown `−20.2%`. These corrections are explicit because the methodology is only credible if the headline numbers survive robustness checks.
 
 ---
 
-## What worked, what didn't, what's open
+## What's in this repo
 
-**Worked.** Leakage-safe pipeline with integration test enforcement. Walk-forward CV with purging — the regime-shift finding is what walk-forward CV is for. Trainer collapse fix: CLS token pooling was collapsing to constant output in shallow 16-dim encoders (probability range ≤ 0.006); switching to mean pooling over all tokens broke the saddle point and restored normal gradient flow, with post-fix tabular_only reaching AUC 0.561 over 50 epochs (see [`docs/findings.md`](docs/findings.md)). Real news ETL: (tabular, text) independence rose from near-0 to 0.170. GAF/MTF + CNN: strongest single auxiliary modality, independence meaningfully above noise floor. Backtest diagnostics now reject both the old label proxy and sequential compounding of overlapping horizon returns.
+The central artifact aligns all modalities by `(stock_id, end_date)`:
 
-**Didn't.** ViT-from-scratch chart encoder: with 300–900 training samples per fold, the ViT could not learn discriminative spatial features; image tokens were effectively random noise at independence 0.047 ≈ noise floor. Candlestick PNG rendering: adds overhead and asks the model to learn visual feature extraction rather than exploit temporal structure. Both were identified by measurement and replaced with GAF/MTF + CNN. 16-dim image bottleneck from the ViT pipeline: removed.
+```text
+(stock_id, end_date)
+  -> tabular_tokens
+  -> text_tokens
+  -> image_tokens
+  -> kg_tokens
+  -> y
+```
 
-**Open.** Universe expansion to 15–20 Nifty50 stocks with 3+ years of history is the highest-leverage next step — it addresses both the regime-shift sensitivity (more data covers multiple volatility periods) and the label non-stationarity (larger peer set reduces sector-rotation noise). Multi-seed evaluation for confidence intervals on modality deltas. Regime-conditional models or volatility-aware training. Longer prediction horizons. Attention attribution to identify which tokens drive predictions.
+Current modality encodings:
+
+- **Tabular**: 11 OHLCV-derived and benchmark-relative features over a 20-day rolling window.
+- **Text**: real `yfinance` news before the prediction date, encoded by FinBERT into a 768-dimensional text embedding.
+- **Image**: GAF + MTF representations of the close-price window, encoded by a CNN.
+- **KG**: 37 leakage-safe relational features: sector context, peer correlations, relative ranks, dispersion, spreads, and market-regime indicators, computed against the 49-stock peer universe.
+
+The fusion model projects each enabled modality to `model_dim`, adds learned modality embeddings and sinusoidal positional encoding, mixes tokens with encoder-only Transformer self-attention, mean-pools the encoded tokens, and emits a binary outperformance logit through a linear head. The implementation supports CLS pooling, but the current default and recommended setting is mean pooling because it fixed the earlier shallow-encoder collapse.
+
+---
+
+## Architecture diagram
+
+```mermaid
+flowchart LR
+    subgraph Inputs["Inputs at sample (s, D)"]
+        T["Tabular<br/>20 x 11 OHLCV<br/>features"]
+        N["News headlines<br/>with event_date <= D"]
+        C["Close-price<br/>20-day window"]
+        K["49-stock peer universe<br/>OHLCV up to D"]
+    end
+
+    subgraph Encoders["Modality encoders"]
+        TE["Rolling tabular<br/>window builder"]
+        NE["FinBERT<br/>768-dim embedding"]
+        CE["GAF + MTF<br/>+ ImageCNN"]
+        KE["Sector + peer +<br/>regime features<br/>37 dims"]
+    end
+
+    subgraph Projections["Projection to shared model_dim"]
+        TP["Linear(tabular_dim -> model_dim)"]
+        NP["Linear(768 -> model_dim)"]
+        CP["Linear(image_dim -> model_dim)"]
+        KP["Linear(37 -> model_dim)"]
+    end
+
+    subgraph Fusion["FusionTransformer"]
+        ME["Add learned<br/>modality embeddings"]
+        PE["Sinusoidal<br/>positional encoding"]
+        F["Transformer encoder<br/>self-attention"]
+        P["Mean pooling<br/>over encoded tokens"]
+    end
+
+    subgraph Output["Output"]
+        H["Dropout + Linear head"]
+        Y["P(outperform Nifty50)<br/>over D+1 to D+H"]
+    end
+
+    T --> TE --> TP --> ME
+    N --> NE --> NP --> ME
+    C --> CE --> CP --> ME
+    K --> KE --> KP --> ME
+    ME --> PE --> F --> P --> H --> Y
+
+    style F fill:#e1f5ff
+    style Y fill:#d4edda
+```
+
+---
+
+## Limitations and what's open
+
+**Scale.** Run C trains on 6 stocks over 1 year, producing 1,260 samples. The 49-stock peer universe improves KG feature quality, but the supervised training set is still small. These numbers should be replicated on a larger training universe and longer history before making stronger claims.
+
+**Combining modalities currently hurts.** The all-four variant improves over tabular-only by `+0.019`, but underperforms text-alone and image-alone, each at `+0.041`. This is a genuine finding: at this dataset size, adding modalities appears to introduce noise faster than the compact fusion model can resolve it. Possible fixes include more data, deeper fusion, modality dropout, learned modality weighting, or regime-aware heads.
+
+**Single-seed evaluation.** Run C uses seed `42`. Multi-seed evaluation would put confidence intervals around individual modality deltas. The current writeup treats the ordering of modality contributions as the main finding rather than the exact magnitude of each number.
 
 ---
 
 ## Reproducing the results
 
-To run on Google Colab instead of locally, open [`notebooks/colab/run_experiment.ipynb`](notebooks/colab/run_experiment.ipynb), set tickers and period in the config cell, and run unattended — results write to your Google Drive.
+To run on Google Colab instead of locally, open [`notebooks/colab/run_experiment.ipynb`](notebooks/colab/run_experiment.ipynb), set the training tickers, peer tickers, period, and output path in the config cell, and run unattended. Results write to Google Drive.
+
+Local setup:
 
 ```bash
 python -m venv .venv
@@ -111,54 +161,52 @@ pip install -r requirements.txt
 pip install -e .
 ```
 
-Run all tests:
+Run tests:
 
 ```bash
 pytest
 ```
 
-Build a toy all-modality artifact:
-
-```bash
-python scripts/build_multimodal_samples.py --toy-output data/processed/multimodal_samples.npz
-```
-
-Run the real-world demo (3-stock universe, with ablations):
+Build a quick real-world artifact and smoke ablation:
 
 ```bash
 python scripts/run_real_world_demo.py \
   --output-dir data/processed/real_world_demo \
-  --period 9mo --window-size 20 --horizon-days 3 \
-  --run-ablations --epochs 1 --batch-size 4 --device cpu
+  --period 1y \
+  --window-size 20 \
+  --horizon-days 3 \
+  --run-ablations \
+  --epochs 1 \
+  --batch-size 4 \
+  --device cpu
 ```
 
-To reproduce the headline results table (20 epochs, 3-fold CV), first run the demo to build the artifact, then:
+Run a longer ablation from an existing artifact:
 
 ```bash
 python scripts/run_ablation_study.py \
   --dataset data/processed/real_world_demo/real_world_multimodal_samples_gaf.npz \
-  --output-dir data/processed/ablations \
-  --cv-splits 3 --horizon-days 3 --embargo-days 5 \
-  --epochs 20 --batch-size 4 --device cpu \
-  --model-dim 16 --num-heads 4 --num-layers 1 --ff-dim 32
+  --output-dir data/processed/real_world_demo/ablations \
+  --cv-splits 3 \
+  --horizon-days 3 \
+  --embargo-days 3 \
+  --epochs 20 \
+  --batch-size 16 \
+  --device cuda \
+  --model-dim 16 \
+  --num-heads 4 \
+  --num-layers 1 \
+  --ff-dim 32
 ```
 
-Generate visualization artifacts:
+Run the corrected backtest:
 
 ```bash
-python scripts/visualize_real_world_demo.py --demo-dir data/processed/real_world_demo
-```
-
-Targeted test checks:
-
-```bash
-pytest tests/unit/test_multimodal_sample_builder.py
-pytest tests/unit/test_tabular_multimodal_samples.py
-pytest tests/unit/test_kg_multimodal_samples.py
-pytest tests/unit/test_image_multimodal_samples.py
-pytest tests/unit/test_text_multimodal_samples.py
-pytest tests/unit/test_ablation_runner.py
-pytest tests/integration/test_no_leakage.py
+python scripts/run_backtest.py \
+  --predictions data/processed/real_world_demo/ablations/prediction_scores_tabular_image_text_kg.csv \
+  --tabular-samples data/processed/real_world_demo/tabular_samples.csv \
+  --output-dir data/processed/real_world_demo/backtest \
+  --top-k 3
 ```
 
 ---
@@ -168,25 +216,21 @@ pytest tests/integration/test_no_leakage.py
 ```text
 .
 ├── AGENTS.md                     # contributor workflow instructions
-├── config/                       # ticker lists
+├── config/                       # ticker and sector configuration
 ├── docs/
-│   ├── findings.md               # experimental findings and diagnostic narratives
-│   ├── design-notes.md           # key design decisions and their rationale
-│   └── figures/                  # visualization snapshots (embedding projections, ablation charts)
-├── scripts/                      # runnable demos, ablations, backtest, diagnostics
-├── src/
-│   ├── data/                     # downloads, features, labels, sample builders
-│   ├── kg/                       # graph construction and context retrieval
-│   ├── models/                   # tabular, image (CNN), text, fusion models
-│   ├── training/                 # train_fusion, cv splits, metrics
-│   └── viz/                      # ranking, embedding projection utilities
-└── tests/
-    ├── integration/              # leakage gate, modality pipeline end-to-end
-    └── unit/                     # per-module tests
+│   ├── architecture.md           # implementation-level architecture
+│   ├── findings.md               # experimental details and robustness notes
+│   ├── design-notes.md           # rationale for non-obvious design choices
+│   └── figures/                  # curated visual outputs
+├── notebooks/
+│   └── colab/run_experiment.ipynb # long-running Colab experiment runner
+├── scripts/                      # demo, ablations, backtest, diagnostics
+├── src/                          # data, KG, models, training, viz modules
+└── tests/                        # unit and integration tests
 ```
 
 ---
 
 ## Responsible use
 
-This is a coursework project. It is not financial advice, not a trading system, and not a validated investment model. The absolute AUC numbers are modest, and backtest numbers must be regenerated with the corrected daily aggregation path before being treated as evidence. The diagnostic framework — leakage safety, walk-forward CV, modality independence measurement — is the primary contribution.
+This is a coursework project. It is not financial advice, not a trading system, and not a validated investment model. The primary contribution is the methodology: leakage-safe multimodal sample construction, purged walk-forward evaluation, modality-independence measurement, and honest correction of results that did not survive robustness checks.
