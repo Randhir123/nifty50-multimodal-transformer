@@ -24,6 +24,16 @@ from src.kg.query_graph import retrieve_kg_context
 from src.models.image_transformer import ImageTransformer, ImageTransformerConfig
 from src.viz.charts import resolve_chart_path
 
+# Lazy imports for GAF/MTF path to avoid hard dep on scipy/pyts in toy tests
+def _import_gaf_mtf():
+    from src.data.timeseries_images import compute_gaf, compute_mtf
+    return compute_gaf, compute_mtf
+
+
+def _import_image_cnn():
+    from src.models.image_cnn import ImageCNN, ImageCNNConfig
+    return ImageCNN, ImageCNNConfig
+
 
 @dataclass(frozen=True)
 class MultimodalSampleArrays:
@@ -454,6 +464,96 @@ def attach_kg_tokens(
         index_id=index_id,
     )
     enriched = replace(arrays, kg_tokens=kg_tokens)
+    enriched.validate()
+    return enriched
+
+
+def build_gaf_mtf_image_tokens(
+    *,
+    stock_ids: Sequence[str],
+    end_dates: Sequence[Any],
+    raw_dir: str | Path,
+    image_size: int = 32,
+    window_size: int = 20,
+    output_dim: int = 16,
+    device: str = "cpu",
+) -> np.ndarray:
+    """Build CNN-encoded GAF/MTF image tokens from raw per-stock CSVs.
+
+    For each (stock_id, end_date) pair, loads close prices from
+    ``raw_dir/{STOCK_UPPER_UNDERSCORE}.csv``, extracts a trailing window of
+    length ``window_size`` ending on or before ``end_date``, computes a
+    2-channel (GAF + MTF) image, and encodes via ``ImageCNN``.
+
+    Samples missing a raw CSV or with insufficient history receive a
+    zero-filled token vector.
+
+    Returns:
+        np.ndarray: shape [N, output_dim], dtype float32
+    """
+    compute_gaf, compute_mtf = _import_gaf_mtf()
+    ImageCNN, ImageCNNConfig = _import_image_cnn()
+
+    raw_dir = Path(raw_dir)
+
+    stock_close: dict[str, pd.Series] = {}
+    for sid in {str(s) for s in stock_ids}:
+        fname = sid.upper().replace(".", "_") + ".csv"
+        csv_path = raw_dir / fname
+        if csv_path.exists():
+            df = pd.read_csv(csv_path, parse_dates=["date"])
+            df = df.sort_values("date").set_index("date")
+            stock_close[sid] = df["close"]
+
+    images: list[np.ndarray] = []
+    for stock_id, end_date in zip(stock_ids, end_dates, strict=True):
+        sid = str(stock_id)
+        ts = pd.Timestamp(end_date).normalize()
+
+        if sid in stock_close:
+            close = stock_close[sid]
+            prices = close[close.index <= ts].iloc[-window_size:].values
+        else:
+            prices = np.array([], dtype=np.float32)
+
+        if len(prices) < 2:
+            images.append(np.zeros((2, image_size, image_size), dtype=np.float32))
+            continue
+
+        gaf = compute_gaf(prices, image_size=image_size)
+        mtf = compute_mtf(prices, image_size=image_size)
+        images.append(np.stack([gaf, mtf], axis=0).astype(np.float32))
+
+    config = ImageCNNConfig(image_size=image_size, in_channels=2, output_dim=output_dim)
+    model = ImageCNN(config).to(device)
+    model.eval()
+
+    batch = torch.from_numpy(np.stack(images).astype(np.float32)).to(device)
+    with torch.no_grad():
+        embeddings = model.encode_images(batch)
+    return embeddings.cpu().numpy().astype(np.float32)
+
+
+def attach_gaf_mtf_image_tokens(
+    arrays: MultimodalSampleArrays,
+    *,
+    raw_dir: str | Path,
+    image_size: int = 32,
+    output_dim: int = 16,
+    device: str = "cpu",
+) -> MultimodalSampleArrays:
+    """Return a copy of ``arrays`` with GAF/MTF image tokens aligned by row."""
+    window_size = arrays.tabular_tokens.shape[1]
+    image_tokens = build_gaf_mtf_image_tokens(
+        stock_ids=arrays.stock_ids,
+        end_dates=arrays.end_dates,
+        raw_dir=raw_dir,
+        image_size=image_size,
+        window_size=window_size,
+        output_dim=output_dim,
+        device=device,
+    )
+    enriched = replace(arrays, image_tokens=image_tokens)
     enriched.validate()
     return enriched
 

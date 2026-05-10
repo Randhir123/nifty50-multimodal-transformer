@@ -30,6 +30,7 @@ from src.data.download_yfinance import (
 from src.data.features import compute_technical_features
 from src.data.labels import generate_outperformance_label
 from src.data.multimodal_samples import (
+    attach_gaf_mtf_image_tokens,
     attach_image_tokens,
     attach_kg_tokens,
     build_tabular_multimodal_samples,
@@ -270,6 +271,32 @@ def _attach_finbert_text_tokens(
 
     return dataclasses.replace(arrays, text_tokens=text_tokens)
 
+def _attach_cnn_image_tokens(arrays, chart_dir: Path, device: str, output_dim: int):
+    """Load .npy arrays and encode them with the ImageCNN."""
+    from src.models.image_cnn import ImageCNN, ImageCNNConfig
+    print("Encoding image arrays using CNN...")
+    
+    config = ImageCNNConfig(image_size=32, in_channels=2, output_dim=output_dim)
+    encoder = ImageCNN(config).to(device)
+    encoder.eval()
+    
+    image_tokens = np.zeros((len(arrays.stock_ids), output_dim), dtype=np.float32)
+    
+    with torch.no_grad():
+        for i in range(len(arrays.stock_ids)):
+            stock_id = str(arrays.stock_ids[i])
+            end_date = pd.Timestamp(arrays.end_dates[i]).normalize()
+            filename = f"{stock_id.upper().replace('.', '_')}_{end_date.strftime('%Y%m%d')}.npy"
+            path = Path(chart_dir) / filename
+            
+            if path.exists():
+                tensor = np.load(str(path))
+                t_tensor = torch.from_numpy(tensor).float().unsqueeze(0).to(device)
+                emb = encoder.encode_images(t_tensor)
+                image_tokens[i] = emb[0].cpu().numpy()
+
+    return dataclasses.replace(arrays, image_tokens=image_tokens)
+
 def _write_summary(path: Path, summary: dict[str, object]) -> None:
     lines = ["# Real-World Multimodal Demo Summary", ""]
     for key, value in summary.items():
@@ -416,17 +443,11 @@ def main() -> None:
     graph = build_market_knowledge_graph(sectors, event_records=event_records)
     arrays = _attach_finbert_text_tokens(arrays, text_records, device=args.device)
     arrays = attach_kg_tokens(arrays, graph, returns=kg_returns)
-    arrays = attach_image_tokens(
+    arrays = attach_gaf_mtf_image_tokens(
         arrays,
-        chart_dir=chart_dir,
-        config=ImageTransformerConfig(
-            image_size=args.image_size,
-            patch_size=args.image_patch_size,
-            model_dim=args.image_model_dim,
-            num_heads=args.image_num_heads,
-            num_layers=args.image_num_layers,
-            ff_dim=args.image_ff_dim,
-        ),
+        raw_dir=raw_dir,
+        image_size=32,
+        output_dim=args.model_dim,
         device=args.device,
     )
 

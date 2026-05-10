@@ -5,7 +5,7 @@ A coursework-scale **knowledge-augmented multimodal Transformer** for Indian equ
 The goal is to predict whether a stock will outperform the Nifty50 benchmark over a short future horizon by combining four synchronized views of the same stock/date sample:
 
 - **Tabular market data**: OHLCV-derived technical features and relative strength versus Nifty.
-- **Chart images**: generated candlestick chart PNGs for the same sample window.
+- **Chart images**: Gramian Angular Field (GAF) and Markov Transition Field (MTF) representations of the close-price series, encoded by a small 3-block CNN (`ImageCNN`). This replaces the earlier candlestick PNG + ViT approach. In 3-fold walk-forward CV on a 6-stock, 1-year dataset, `tabular_image` achieved the highest mean AUC of all variants (+2.8pp over tabular-only), confirming that GAF/MTF captures temporal shape information that scalar rolling statistics discard.
 - **Text records**: real external news fetched via `yfinance` and encoded using FinBERT, combined with leakage-safe market summaries.
 - **Knowledge graph context**: sector, peer, event, and recent-return context.
 
@@ -33,7 +33,7 @@ What's implemented:
 - aligned multimodal sample contract;
 - real tabular rolling-window sample builder;
 - KG token wiring aligned by `stock_id + end_date`;
-- chart-image token wiring using generated candlestick PNGs and `ImageTransformer.encode_images(...)`;
+- chart-image token wiring using GAF+MTF numpy arrays and `ImageCNN.encode_images(...)` (Session 7: replaced candlestick PNGs + ViT with mathematical time-series images + CNN);
 - text token wiring with `event_date <= end_date` cutoffs;
 - fusion training across modality combinations;
 - ablation runner that compares tabular-only versus multimodal variants;
@@ -58,11 +58,11 @@ The demo is intended to prove the **pipeline and representation story** first: r
 yfinance OHLCV snapshots
   -> feature engineering + labels
   -> rolling tabular windows
-  -> generated candlestick charts
-  -> as-of-date text records
+  -> GAF + MTF time-series images (close-price, 20-day window)
+  -> as-of-date text records (FinBERT-encoded)
   -> lightweight KG context
   -> aligned multimodal NPZ
-  -> FusionTransformer
+  -> FusionTransformer (ImageCNN + tabular + text + KG)
   -> ablation results / rankings / visualizations
 ```
 
@@ -338,7 +338,7 @@ Use `--single-split` (or the default `--cv-splits 1`) to keep the original singl
 
 Every multimodal sample is keyed by `(stock_id, end_date)`. The pipeline enforces that for prediction date `D` with horizon `H`: tabular windows contain only rows with `date <= D`; text records are filtered to `event_date <= D`; candlestick chart filenames encode `D` (format `{SYMBOL}_{YYYYMMDD}.png`) and are generated from OHLCV data sliced to `date <= D`; KG context carries an `as_of_date` field equal to `D`; and the label is computed from prices at `D+1` through `D+H`, with NaN-labelled rows dropped so a sample is never emitted without valid future data.
 
-These invariants are mechanically verified in [`tests/integration/test_no_leakage.py`](tests/integration/test_no_leakage.py) using deterministic synthetic data. The test covers six positive assertions and two negative tests (future text injection is dropped; truncated future raises rather than silently falling back). It runs on every push and pull request as a required CI gate. The test does not cover subtler issues such as train/test contamination across time folds — that requires purged walk-forward cross-validation, which is a separate concern.
+These invariants are mechanically verified in [`tests/integration/test_no_leakage.py`](tests/integration/test_no_leakage.py) using deterministic synthetic data. The test covers six positive assertions and two negative tests (future text injection is dropped; truncated future raises rather than silently falling back). It runs on every push and pull request as a required CI gate. GAF/MTF image filenames follow the same convention (`{SYMBOL}_{YYYYMMDD}.npy`) and are covered by the same gate. The test does not cover subtler issues such as train/test contamination across time folds — that requires purged walk-forward cross-validation, which is a separate concern.
 
 ---
 

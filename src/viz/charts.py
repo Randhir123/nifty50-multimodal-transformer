@@ -9,9 +9,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import mplfinance as mpf
+import numpy as np
 import pandas as pd
 
+from src.data.timeseries_images import compute_stacked_image
 
 REQUIRED_OHLCV_COLUMNS: tuple[str, ...] = ("open", "high", "low", "close", "volume")
 
@@ -36,14 +37,14 @@ def _normalize_for_mplfinance(df: pd.DataFrame, *, date_col: str) -> pd.DataFram
 def build_chart_filename(symbol: str, prediction_date: pd.Timestamp) -> str:
     """Create a deterministic chart filename for one (stock, date) sample.
 
-    Format: ``{symbol}_{YYYYMMDD}.png``.
+    Format: ``{symbol}_{YYYYMMDD}.npy``.
     """
     normalized_symbol = symbol.strip().upper()
     if not normalized_symbol:
         raise ValueError("symbol must be non-empty")
 
     ts = pd.Timestamp(prediction_date)
-    return f"{normalized_symbol}_{ts.strftime('%Y%m%d')}.png"
+    return f"{normalized_symbol}_{ts.strftime('%Y%m%d')}.npy"
 
 
 def resolve_chart_path(
@@ -64,38 +65,14 @@ def generate_candlestick_chart(
     output_path: str | Path,
     date_col: str = "date",
 ) -> Path:
-    """Render and save a candlestick chart with volume and MA(10, 20).
-
-    Args:
-        ohlcv_window: OHLCV rows for the chart window (typically 60 rows).
-        output_path: Destination PNG file.
-        date_col: Name of the date column in ``ohlcv_window``.
-
-    Returns:
-        The saved path.
-    """
+    """Generate and save a GAF/MTF stacked tensor array replacing PNGs."""
     chart_df = _normalize_for_mplfinance(ohlcv_window, date_col=date_col)
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)
 
-    mpf.plot(
-        chart_df,
-        type="candle",
-        volume=True,
-        mav=(10, 20),
-        style="classic",
-        ylabel="Price",
-        ylabel_lower="Volume",
-        xrotation=0,
-        datetime_format="%Y-%m-%d",
-        savefig={
-            "fname": str(out),
-            "dpi": 120,
-            "pad_inches": 0.05,
-            "metadata": {"Software": "nifty50-multimodal-transformer"},
-        },
-    )
+    stacked_tensor = compute_stacked_image(chart_df.values, image_size=32)
+    np.save(str(out), stacked_tensor)
     return out
 
 

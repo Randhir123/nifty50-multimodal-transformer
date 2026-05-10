@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 
@@ -14,7 +15,87 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument("--tabular-samples", type=str, required=True, help="Path to tabular_samples.csv")
     parser.add_argument("--output-dir", type=str, default="data/processed/backtest")
     parser.add_argument("--top-k", type=int, default=1, help="Number of top stocks to hold")
+    parser.add_argument(
+        "--raw-dir",
+        type=str,
+        default=None,
+        help="Directory with raw per-stock CSVs (e.g. RELIANCE_NS.csv) and NSEI.csv. "
+        "Required when tabular_samples.csv does not contain forward-return columns.",
+    )
+    parser.add_argument(
+        "--horizon-days",
+        type=int,
+        default=3,
+        help="Forward-return horizon in trading days (must match the label horizon).",
+    )
+    parser.add_argument(
+        "--use-y-proxy",
+        action="store_true",
+        help="Fall back to the y_true outperformance proxy (old behaviour, not a real backtest).",
+    )
     return parser
+
+
+def _ticker_to_filename(stock_id: str) -> str:
+    """Convert 'RELIANCE.NS' → 'RELIANCE_NS.csv'."""
+    return stock_id.replace(".", "_") + ".csv"
+
+
+def _compute_forward_returns(
+    samples: pd.DataFrame,
+    raw_dir: Path,
+    horizon_days: int,
+) -> pd.DataFrame:
+    """Attach stock_future_return and index_future_return columns to *samples*.
+
+    Strategy:
+    1. Compute per-stock forward returns from the 'close' column already present
+       in tabular_samples.csv (shift -horizon_days within each stock group).
+    2. Load NSEI.csv from raw_dir to obtain the benchmark forward return for
+       the same dates.
+
+    Returns a copy of *samples* with two new columns added.
+    """
+    out = samples.copy()
+    out = out.sort_values(["stock_id", "date"]).reset_index(drop=True)
+
+    # Per-stock forward return from close already in tabular_samples.csv
+    out["stock_future_return"] = (
+        out.groupby("stock_id")["close"]
+        .transform(lambda s: s.shift(-horizon_days) / s - 1.0)
+    )
+
+    # Benchmark forward return from NSEI.csv
+    nsei_path = raw_dir / "NSEI.csv"
+    if not nsei_path.exists():
+        raise FileNotFoundError(
+            f"Benchmark CSV not found at {nsei_path}. "
+            "Provide --raw-dir pointing to the directory that contains NSEI.csv."
+        )
+    nsei = pd.read_csv(nsei_path, parse_dates=["date"])
+    nsei = nsei.sort_values("date").reset_index(drop=True)
+    nsei["index_future_return"] = nsei["close"].shift(-horizon_days) / nsei["close"] - 1.0
+
+    out = out.merge(
+        nsei[["date", "index_future_return"]],
+        on="date",
+        how="left",
+    )
+    return out
+
+
+def _sharpe(returns: pd.Series, trading_days: int = 252) -> float:
+    """Annualised Sharpe ratio (risk-free rate = 0)."""
+    if returns.std() == 0:
+        return float("nan")
+    return float(returns.mean() / returns.std() * np.sqrt(trading_days))
+
+
+def _max_drawdown(cum_returns: pd.Series) -> float:
+    """Maximum peak-to-trough drawdown as a positive fraction."""
+    roll_max = cum_returns.cummax()
+    drawdown = cum_returns / roll_max - 1.0
+    return float(drawdown.min())
 
 
 def main() -> None:
@@ -41,57 +122,87 @@ def main() -> None:
         raise ValueError("tabular_samples.csv must contain 'date' or 'end_date' column.")
 
     # Identify return columns
-    stock_ret_col = next((c for c in samples.columns if "future" in c and "return" in c and "index" not in c and "benchmark" not in c), None)
-    index_ret_col = next((c for c in samples.columns if "future" in c and "return" in c and ("index" in c or "benchmark" in c)), None)
+    stock_ret_col = next(
+        (c for c in samples.columns if "future" in c and "return" in c and "index" not in c and "benchmark" not in c),
+        None,
+    )
+    index_ret_col = next(
+        (c for c in samples.columns if "future" in c and "return" in c and ("index" in c or "benchmark" in c)),
+        None,
+    )
 
-    if not stock_ret_col or not index_ret_col:
-        print("WARNING: Could not find exact future_return columns. Falling back to y_true outperformance proxy.")
+    if args.use_y_proxy:
+        print("WARNING: --use-y-proxy flag set. Using y_true outperformance proxy (not a real backtest).")
         stock_ret_col = "proxy_stock_return"
         index_ret_col = "proxy_index_return"
-        samples[stock_ret_col] = samples.get("label", preds["y_true"]) * 0.01  # +1% outperformance proxy
-        samples[index_ret_col] = 0.005  # +0.5% benchmark proxy
+        samples[stock_ret_col] = samples.get("label", preds["y_true"]) * 0.01
+        samples[index_ret_col] = 0.005
+    elif not stock_ret_col or not index_ret_col:
+        if args.raw_dir is None:
+            raise ValueError(
+                "tabular_samples.csv has no future_return columns and --raw-dir was not provided. "
+                "Pass --raw-dir pointing to the directory with raw per-stock CSVs and NSEI.csv, "
+                "or use --use-y-proxy to fall back to the classification-label proxy (not a real backtest)."
+            )
+        print(f"Computing real forward returns from raw CSVs in {args.raw_dir} (horizon={args.horizon_days}d)...")
+        samples = _compute_forward_returns(samples, Path(args.raw_dir), args.horizon_days)
+        stock_ret_col = "stock_future_return"
+        index_ret_col = "index_future_return"
+    else:
+        print(f"Using existing return columns: stock={stock_ret_col}, index={index_ret_col}")
 
-    # Merge predictions with samples to get returns
+    # Merge predictions with samples
     merged = pd.merge(
         preds,
         samples[["stock_id", "date", stock_ret_col, index_ret_col]],
         left_on=["stock_id", "end_date"],
         right_on=["stock_id", "date"],
-        how="inner"
+        how="inner",
     )
 
     if merged.empty:
         raise ValueError("No matching rows after merging predictions with tabular samples on stock_id + date.")
 
+    print(f"Merged {len(merged)} rows covering {merged['end_date'].nunique()} rebalance dates.")
+
     # Backtest loop
     dates = sorted(merged["end_date"].unique())
-    portfolio_returns = []
-    benchmark_returns = []
+    portfolio_returns: list[float] = []
+    benchmark_returns: list[float] = []
+    position_counts: list[int] = []
 
     for d in dates:
-        day_data = merged[merged["end_date"] == d]
+        day_data = merged[merged["end_date"] == d].dropna(subset=[stock_ret_col])
+        if day_data.empty:
+            continue
         top_k = day_data.nlargest(args.top_k, "y_prob")
-        
-        port_ret = top_k[stock_ret_col].mean()
-        portfolio_returns.append(port_ret)
-        
-        bench_ret = day_data[index_ret_col].iloc[0]
-        benchmark_returns.append(bench_ret)
+        portfolio_returns.append(float(top_k[stock_ret_col].mean()))
+        benchmark_returns.append(float(day_data[index_ret_col].dropna().iloc[0] if not day_data[index_ret_col].dropna().empty else 0.0))
+        position_counts.append(len(top_k))
 
-    results = pd.DataFrame({
-        "date": dates,
-        "portfolio_return": portfolio_returns,
-        "benchmark_return": benchmark_returns
-    }).set_index("date")
+    results = pd.DataFrame(
+        {
+            "date": dates[: len(portfolio_returns)],
+            "portfolio_return": portfolio_returns,
+            "benchmark_return": benchmark_returns,
+        }
+    ).set_index("date")
 
     results["portfolio_cum"] = (1 + results["portfolio_return"].fillna(0)).cumprod()
     results["benchmark_cum"] = (1 + results["benchmark_return"].fillna(0)).cumprod()
 
-    # Metrics
+    excess = results["portfolio_return"] - results["benchmark_return"]
+
     metrics = {
-        "total_return": float(results["portfolio_cum"].iloc[-1] - 1),
-        "benchmark_total_return": float(results["benchmark_cum"].iloc[-1] - 1),
-        "trading_days": len(dates),
+        "total_return_model": float(results["portfolio_cum"].iloc[-1] - 1),
+        "total_return_benchmark": float(results["benchmark_cum"].iloc[-1] - 1),
+        "trading_days": len(results),
+        "rebalance_dates": len(dates),
+        "avg_position_count": float(np.mean(position_counts)),
+        "sharpe_ratio": _sharpe(excess),
+        "max_drawdown_model": _max_drawdown(results["portfolio_cum"]),
+        "note_sharpe": "Risk-free rate = 0, 252 trading days/year assumed",
+        "return_source": "real_forward_returns" if not args.use_y_proxy else "y_proxy",
     }
 
     metrics_path = output_dir / "backtest_metrics.json"
@@ -100,18 +211,21 @@ def main() -> None:
 
     print(f"\nMetrics saved to {metrics_path}")
     for k, v in metrics.items():
-        print(f"  {k}: {v:.4f}")
+        if isinstance(v, float):
+            print(f"  {k}: {v:.4f}")
+        else:
+            print(f"  {k}: {v}")
 
     # Plot
     plt.figure(figsize=(10, 6))
     plt.plot(results.index, results["portfolio_cum"], label=f"Top-{args.top_k} Portfolio", color="blue")
-    plt.plot(results.index, results["benchmark_cum"], label="Benchmark", color="gray", linestyle="--")
+    plt.plot(results.index, results["benchmark_cum"], label="Benchmark (^NSEI)", color="gray", linestyle="--")
     plt.title("Cumulative Returns: Portfolio vs Benchmark")
     plt.xlabel("Date")
     plt.ylabel("Cumulative Growth (1.0 = baseline)")
     plt.legend()
     plt.grid(True, alpha=0.3)
-    
+
     plot_path = output_dir / "backtest_curve.png"
     plt.savefig(plot_path, bbox_inches="tight")
     plt.close()

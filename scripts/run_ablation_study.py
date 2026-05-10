@@ -60,6 +60,8 @@ DEFAULT_VARIANTS: tuple[AblationVariant, ...] = (
     AblationVariant("tabular_image_text_kg", use_image=True, use_text=True, use_kg=True),
 )
 
+IMAGE_VARIANTS: tuple[AblationVariant, ...] = DEFAULT_VARIANTS  # kept for backward compat
+
 
 def available_dataset_keys(dataset_path: str | Path) -> set[str]:
     data = np.load(dataset_path, allow_pickle=False)
@@ -71,7 +73,10 @@ def select_variants(
     *,
     variants: tuple[AblationVariant, ...] = DEFAULT_VARIANTS,
     strict: bool = False,
+    with_image: bool = False,
 ) -> list[AblationVariant]:
+    if with_image:
+        variants = variants + IMAGE_VARIANTS
     selected: list[AblationVariant] = []
     missing_messages: list[str] = []
     for variant in variants:
@@ -460,7 +465,8 @@ def run_ablation_study(args: argparse.Namespace) -> list[dict[str, object]]:
     use_cv = (not getattr(args, "single_split", False)) and getattr(args, "cv_splits", 1) > 1
 
     dataset_keys = available_dataset_keys(args.dataset)
-    variants = select_variants(dataset_keys, strict=args.strict)
+    variants = select_variants(dataset_keys, strict=args.strict,
+                               with_image=getattr(args, "with_image", False))
 
     output_dir = Path(args.output_dir)
     checkpoint_dir = output_dir / "checkpoints"
@@ -569,6 +575,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--max-tokens", type=int, default=4096)
     parser.add_argument("--strict", action="store_true")
+    parser.add_argument("--with-image", action="store_true",
+                        help="Add image modality variants (tabular_image, tabular_image_text_kg).")
     # Walk-forward CV arguments
     parser.add_argument(
         "--cv-splits",

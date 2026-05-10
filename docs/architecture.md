@@ -145,7 +145,7 @@ The compact Colab demo uses deliberately small dimensions so that the pipeline c
 | Rolling window | `20` | each tabular sample uses 20 historical rows |
 | Tabular feature count | `11` | engineered OHLCV / benchmark-relative features |
 | Text embedding dimension | `768` | FinBERT embedding of yfinance news and summaries |
-| Image embedding dimension | `16` | output of the demo image Transformer encoder |
+| Image embedding dimension | `16` | output of the CNN encoder mapping GAF/MTF representations |
 | KG embedding dimension | usually `4` | peer count, peer return, sector return, event flag; inspect NPZ for exact width |
 | Shared fusion dimension | `16` | common Transformer dimension after modality projections |
 | Fusion attention heads | `4` | multi-head self-attention heads |

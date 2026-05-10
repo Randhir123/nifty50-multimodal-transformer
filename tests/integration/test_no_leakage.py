@@ -202,8 +202,8 @@ class TestNoLeakage:
             end_date = pd.Timestamp(arrays.end_dates[i]).normalize()
 
             filename = build_chart_filename(stock_id, end_date)
-            # Parse date back from filename: last segment before .png
-            date_str = filename.rsplit("_", 1)[-1].replace(".png", "")
+            # Parse date back from filename: last segment before .npy
+            date_str = filename.rsplit("_", 1)[-1].replace(".npy", "")
             assert len(date_str) == 8, f"Unexpected date string in filename: {filename!r}"
             parsed = pd.Timestamp(date_str).normalize()
 
