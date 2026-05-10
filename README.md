@@ -40,7 +40,7 @@ The fusion model ([`src/models/fusion.py`](src/models/fusion.py)) projects each 
 
 Training uses BCE loss with output bias initialized to `logit(p_positive)`. Default: 3-fold purged walk-forward CV, 20 epochs, CPU-compatible.
 
-For the full implementation-level architecture, see [`docs/architecture.md`](docs/architecture.md).
+For key design decisions (GAF/MTF, purged CV, FinBERT), see [`docs/design-notes.md`](docs/design-notes.md).
 
 ---
 
@@ -106,6 +106,8 @@ This is mechanically consistent with the per-fold diagnostics: fold 2 val AUC 0.
 ---
 
 ## Reproducing the results
+
+To run on Google Colab instead of locally, open [`notebooks/colab/run_experiment.ipynb`](notebooks/colab/run_experiment.ipynb), set tickers and period in the config cell, and run unattended — results write to your Google Drive.
 
 ```bash
 python -m venv .venv
@@ -173,7 +175,6 @@ pytest tests/integration/test_no_leakage.py
 ├── AGENTS.md                     # contributor workflow instructions
 ├── config/                       # ticker lists
 ├── docs/
-│   ├── architecture.md           # current implementation architecture
 │   ├── findings.md               # experimental findings and diagnostic narratives
 │   ├── design-notes.md           # key design decisions and their rationale
 │   └── figures/                  # visualization snapshots (embedding projections, ablation charts)
