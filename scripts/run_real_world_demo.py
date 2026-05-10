@@ -105,9 +105,10 @@ def _load_or_download(
     stock_data: dict[str, pd.DataFrame] = {}
 
     missing = []
+    today = date.today()
     for ticker in tickers:
         path = deterministic_csv_path_for_ticker(ticker, raw_dir)
-        if path.exists() and not force_refresh:
+        if path.exists() and not force_refresh and date.fromtimestamp(path.stat().st_mtime) == today:
             stock_data[ticker] = pd.read_csv(path, parse_dates=["date"])
             provenance[ticker] = f"cache:{path}"
         else:
@@ -121,7 +122,7 @@ def _load_or_download(
             provenance[ticker] = f"download:{save_path}"
 
     benchmark_path = deterministic_csv_path_for_ticker(benchmark, raw_dir)
-    if benchmark_path.exists() and not force_refresh:
+    if benchmark_path.exists() and not force_refresh and date.fromtimestamp(benchmark_path.stat().st_mtime) == today:
         benchmark_df = pd.read_csv(benchmark_path, parse_dates=["date"])
         provenance[benchmark] = f"cache:{benchmark_path}"
     else:

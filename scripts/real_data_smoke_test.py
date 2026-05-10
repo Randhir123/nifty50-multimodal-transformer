@@ -64,7 +64,7 @@ def _load_or_download_csv(
         (df, csv_path, refreshed) where refreshed=True means a fresh download was used.
     """
     csv_path = deterministic_csv_path_for_ticker(ticker, output_dir=raw_dir)
-    if csv_path.exists() and not force_refresh:
+    if csv_path.exists() and not force_refresh and date.fromtimestamp(csv_path.stat().st_mtime) == date.today():
         df = pd.read_csv(csv_path)
         df["date"] = pd.to_datetime(df["date"])
         return df, csv_path, False
