@@ -5,6 +5,8 @@ numpy>=1.26
 pandas>=2.2
 scikit-learn>=1.4
 transformers>=4.41
+scipy>=1.10.0
+pyts>=0.13.0
 
 # Charts
 mplfinance==0.12.10b0
